@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Soil thin section mosaics: build & analysis"
+version = "0.0.1"
+
+dependencies = [
+    "tkinter",
+    "python-opencv",
+    "numpy",
+]
+
+authors = [
+  {name = "Alberto Lencina", email = "alencina@azul.faa.unicen.edu.ar"},
+]
+maintainers = [
+  {name = "Alberto Lencina", email = "alencina@azul.faa.unicen.edu.ar"}
+]
+
+description = "This is a collection of script to acquire, build and processing soil thin section mosaics"
+
+readme = "README.md"
+
+license = "GPL-3.0-or-later"
+
+license-files = [LICENSE]
+
+keywords = ["soil", "thin section", "mosaic", "processing"]
+
+[project.urls]
+Homepage = "https://github.com/alencina-faa/Soil-thin-section-mosaics_build-and-processing"
+Documentation = "https://github.com/alencina-faa/Soil-thin-section-mosaics_build-and-processing"
+Repository = "https://github.com/alencina-faa/Soil-thin-section-mosaics_build-and-processing.git"
+Issues = "https://github.com/alencina-faa/Soil-thin-section-mosaics_build-and-processing/issues"
