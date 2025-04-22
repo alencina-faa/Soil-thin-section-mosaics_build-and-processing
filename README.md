@@ -1,2 +1,2 @@
 # Soil thin section mosaics: build & analysis
- This is a collection of script to acquire, build and processing soil thin section mosaics
+ This is a collection of scripts to acquire, build and analyse soil thin section mosaics
