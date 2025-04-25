@@ -38,8 +38,11 @@ class stsmApp:
         self.notebook.add(self.binary_frame, text="Binary")
         self.notebook.add(self.processing_frame, text="Processing")
         
-        # Setup Binarizing energy tab
+        # Setup the Binary tab
         self.binary_tab()
+
+        #Setup the Processing tab
+        self.processing_tab()
 #Ends the mainwindow definitions
 
 #STARTS THE TABS DEFINITIONS
@@ -133,6 +136,36 @@ class stsmApp:
         ) #    background="black",             foreground="white"
         
         self.canvas.create_window(640, 360, window=self.no_image_label)
+
+
+#Setup the Processing tab
+    def processing_tab(self):
+        # Create a frame for controls
+        self.processing_frame_controls = ttk.Frame(self.processing_frame)
+        self.processing_frame_controls.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)       
+
+        # Add label and input for Image pixel calibration (but not yet implemented)
+        self.pixel_cal_label = ttk.Label(
+            self.processing_frame_controls,
+            text='Pixel calibration (pixel/\u03bcm):',
+        )
+        self.pixel_cal_label.pack(pady=(0, 5))
+        
+        self.pixel_cal = tk.StringVar(value="0,3051")  
+        self.pixel_cal_input = ttk.Entry(
+            self.processing_frame_controls,
+            textvariable=self.pixel_cal,
+        )
+        self.pixel_cal_input.pack(pady=(0, 5), fill=tk.X)  
+        
+        # Create a button to load the mosaic to be processed
+        self.load_button = ttk.Button(
+            self.processing_frame_controls, 
+            text="Load Mosaic", 
+            command=self.load_mosaic
+        )
+        self.load_button.pack(pady=5)
+#ENDS THE TABS DEFINITIONS
 
     def show_layer_controls(self):
         """Show the unified layer control frame after images are loaded"""
@@ -346,6 +379,62 @@ class stsmApp:
             messagebox.showinfo("Success", f"Binary mosaic saved to '{os.path.basename(file_path)}'")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save image: {str(e)}")
+
+    def load_mosaic(self):
+        # Verify if pixel calibration is set
+        if not self.pixel_cal_input.get():
+            messagebox.showwarning("Warning", "Please set the pixel calibration value.")
+            return
+        # Clear previous images
+        self.images = []
+        # Open file dialog to select images
+        file_paths = fd.askopenfilename(
+            title="Select a Mosaic",
+            filetypes=[("Image files", "*.tiff")]
+        )
+        
+        if len(file_paths) < 1:
+            messagebox.showwarning("Warning", "Please select at least one images.")
+            return
+            
+        image = cv2.imread(file_paths)
+        if image is not None:
+            # Select ROI
+            messagebox.showinfo("Select ROI", "Select the 'Region Of Interest' in the loaded mosaic.")
+            #Here is need that the image be displayed in a canvas to select the ROI. 
+            #But it is also needed that ROI refers to the original image, not the resized one.
+            #Because calculus must be done in the original image.
+            r = cv2.selectROI("Select ROI", image, fromCenter=False, showCrosshair=True)
+            cv2.destroyWindow("Select ROI")
+            image = cv2.cvtColor(image[int(r[1]):int(r[1]+r[3]), int(r[0]):int(r[0]+r[2])], cv2.COLOR_BGR2GRAY)
+            self.images.append(image) #One of the stored image to be displayed in the Processing tab canvas.
+
+            self.process_mosaic(image)
+            
+            
+        else:
+            messagebox.showerror("Error", f"Failed to load image.")
+            return
+    
+    def process_mosaic(self, image):
+        # Process the loaded mosaic image
+        # Find contours
+        contours, _ = cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Calculate the area of each contour
+        contours_by_area = [[contour, cv2.contourArea(contour)] for contour in contours]
+
+
+        
+        # Add the processed image to the images list
+        #self.images.append()
+        
+        # Show the layer controls now that we have images
+        self.show_layer_controls() #Define a function similar or modify to rehuse this in the Processing tab
+            
+            # Update the display with the processed image
+        self.update_display() #Define a function similar or modify to rehuse this in the Processing tab
+    
 
 if __name__ == "__main__":
     root = tk.Tk()
