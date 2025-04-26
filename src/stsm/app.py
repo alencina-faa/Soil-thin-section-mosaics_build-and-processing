@@ -29,6 +29,15 @@ class stsmApp:
         self.proc_layer_names = ["Original", "Pore \u2264 50μm", "Pore > 50μm"]
         self.original_image = None  # Store the original image before ROI selection
         
+        # ROI selection variables
+        self.roi_mode = False
+        self.roi_start_x = None
+        self.roi_start_y = None
+        self.roi_rect = None
+        self.roi_image = None
+        self.roi_scale = 1.0
+        self.roi_tk_image = None  # Store reference to prevent garbage collection
+        
         # Create notebook (tab container)
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill=tk.BOTH, expand=True)
@@ -165,7 +174,7 @@ class stsmApp:
             width=7,
             justify=tk.CENTER
         )
-        self.pixel_cal_input.pack(pady=(0, 5))#, fill=tk.X)  
+        self.pixel_cal_input.pack(pady=(0, 5))
         
         # Create a button to load the mosaic to be processed
         self.load_mosaic_button = ttk.Button(
@@ -174,6 +183,15 @@ class stsmApp:
             command=self.load_mosaic
         )
         self.load_mosaic_button.pack(pady=5)
+        
+        # Create a button to confirm ROI selection
+        self.confirm_roi_button = ttk.Button(
+            self.processing_frame_controls,
+            text="Confirm ROI",
+            command=self.confirm_roi,
+            state=tk.DISABLED  # Initially disabled
+        )
+        self.confirm_roi_button.pack(pady=5)
         
         # Create a unified layer control frame for processing tab - but don't pack it yet
         self.proc_unified_layer_frame = ttk.LabelFrame(self.processing_frame_controls, text="Layer Controls")
@@ -264,6 +282,16 @@ class stsmApp:
         )
         
         self.proc_canvas.create_window(640, 360, window=self.proc_no_image_label)
+        
+        # Add ROI instruction label (initially hidden)
+        self.roi_instruction_label = ttk.Label(
+            self.proc_canvas,
+            text="Click and drag to select ROI. Press Enter to confirm.",
+            background="white",
+            foreground="black",
+            padding=5
+        )
+        self.roi_instruction_window = None
 
     def show_layer_controls(self):
         """Show the unified layer control frame after images are loaded"""
@@ -539,7 +567,7 @@ class stsmApp:
 
     def update_proc_display(self):
         """Update the display in the processing tab"""
-        if not self.proc_images:
+        if not self.proc_images and not self.roi_mode:
             return
             
         # Hide the "no image" label
@@ -557,41 +585,91 @@ class stsmApp:
             canvas_width = 800
         if canvas_height <= 1:
             canvas_height = 600
+        
+        # If in ROI selection mode, display the original image for ROI selection
+        if self.roi_mode and self.roi_image is not None:
+            # Calculate the scale factor to fit image in the canvas
+            img_height, img_width = self.roi_image.shape[:2]
+            scale_x = canvas_width / img_width
+            scale_y = canvas_height / img_height
+            scale = min(scale_x, scale_y)
+            self.roi_scale = scale
             
-        # Calculate the scale factor to fit images in the canvas
-        img_height, img_width = self.proc_images[0].shape
-        scale_x = canvas_width / img_width
-        scale_y = canvas_height / img_height
-        scale = min(scale_x, scale_y)
-        
-        # Calculate new dimensions
-        new_width = int(img_width * scale)
-        new_height = int(img_height * scale)
-        
-        # Convert OpenCV images to PIL format and resize
-        self.proc_tk_images = []
-        for img in self.proc_images:
+            # Calculate new dimensions
+            new_width = int(img_width * scale)
+            new_height = int(img_height * scale)
+            
             # Convert to PIL Image
-            pil_img = Image.fromarray(img)
+            rgb_image = cv2.cvtColor(self.roi_image, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(rgb_image)
+            
             # Resize to fit canvas
             pil_img = pil_img.resize((new_width, new_height), Image.LANCZOS)
+            
             # Convert to PhotoImage
             tk_img = ImageTk.PhotoImage(pil_img)
-            self.proc_tk_images.append(tk_img)
-        
-        # Calculate position to center the image
-        x_pos = (canvas_width - new_width) // 2
-        y_pos = (canvas_height - new_height) // 2
-        
-        # Display images in the specified order, respecting visibility
-        for i in reversed(range(len(self.proc_layer_order))):  # Reversed to draw bottom layer first
-            layer_idx = self.proc_layer_order[i]
-            if self.proc_layer_visibility[layer_idx].get():
-                self.proc_canvas.create_image(
-                    x_pos, y_pos,
-                    anchor=tk.NW,
-                    image=self.proc_tk_images[layer_idx]
+            self.roi_tk_image = tk_img  # Store reference to prevent garbage collection
+            
+            # Calculate position to center the image
+            x_pos = (canvas_width - new_width) // 2
+            y_pos = (canvas_height - new_height) // 2
+            
+            # Display the image
+            self.proc_canvas.create_image(x_pos, y_pos, anchor=tk.NW, image=tk_img, tags="roi_image")
+            
+            # Show ROI instruction label
+            if self.roi_instruction_window is None:
+                self.roi_instruction_window = self.proc_canvas.create_window(
+                    canvas_width // 2, 
+                    y_pos + new_height + 10,
+                    window=self.roi_instruction_label
                 )
+            
+            # Store the image position for ROI calculations
+            self.roi_image_pos = (x_pos, y_pos)
+            return
+            
+        # If we have processed images, display them
+        if self.proc_images:
+            # Calculate the scale factor to fit images in the canvas
+            img_height, img_width = self.proc_images[0].shape[:2]
+            scale_x = canvas_width / img_width
+            scale_y = canvas_height / img_height
+            scale = min(scale_x, scale_y)
+            
+            # Calculate new dimensions
+            new_width = int(img_width * scale)
+            new_height = int(img_height * scale)
+            
+            # Convert OpenCV images to PIL format and resize
+            self.proc_tk_images = []
+            for img in self.proc_images:
+                # Convert to PIL Image (handle both grayscale and color images)
+                if len(img.shape) == 2:  # Grayscale
+                    pil_img = Image.fromarray(img)
+                else:  # Color (BGR)
+                    pil_img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+                
+                # Resize to fit canvas
+                pil_img = pil_img.resize((new_width, new_height), Image.LANCZOS)
+                
+                # Convert to PhotoImage
+                tk_img = ImageTk.PhotoImage(pil_img)
+                self.proc_tk_images.append(tk_img)
+            
+            # Calculate position to center the image
+            x_pos = (canvas_width - new_width) // 2
+            y_pos = (canvas_height - new_height) // 2
+            
+            # Display images in the specified order, respecting visibility
+            for i in reversed(range(len(self.proc_layer_order))):  # Reversed to draw bottom layer first
+                layer_idx = self.proc_layer_order[i]
+                if self.proc_layer_visibility[layer_idx].get():
+                    self.proc_canvas.create_image(
+                        x_pos, y_pos,
+                        anchor=tk.NW,
+                        image=self.proc_tk_images[layer_idx]
+                    )
 
     def save_image(self):
         """Save the combined result as a TIFF file"""
@@ -671,134 +749,142 @@ class stsmApp:
         # Store the original image
         self.original_image = image.copy()
         
+        # Enter ROI selection mode
+        self.roi_mode = True
+        self.roi_image = image
+        
         # Display the image for ROI selection
-        self.select_roi_on_canvas(image)
+        self.update_proc_display()
+        
+        # Bind mouse events for ROI selection
+        self.proc_canvas.bind("<ButtonPress-1>", self.start_roi)
+        self.proc_canvas.bind("<B1-Motion>", self.update_roi)
+        self.proc_canvas.bind("<ButtonRelease-1>", self.end_roi_drag)
+        
+        # Bind keyboard event for confirming ROI (only Enter key)
+        self.root.bind("<Return>", self.confirm_roi)
+        
+        # Enable the confirm ROI button
+        self.confirm_roi_button.config(state=tk.NORMAL)
+        
+        # Show a message to the user
+        messagebox.showinfo("Select ROI", "Click and drag to select a Region Of Interest. Press Enter or click 'Confirm ROI' button when done.")
 
-    def select_roi_on_canvas(self, image):
-        """Display the image on canvas and allow ROI selection"""
-        # Convert BGR to RGB for display
-        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    def start_roi(self, event):
+        """Start ROI selection"""
+        if not self.roi_mode:
+            return
+            
+        # Get canvas coordinates
+        x = event.x
+        y = event.y
         
-        # Create a new window for ROI selection
-        roi_window = tk.Toplevel(self.root)
-        roi_window.title("Select Region of Interest")
-        roi_window.geometry("800x600")
+        # Check if click is within the image
+        img_x, img_y = self.roi_image_pos
+        img_height, img_width = self.roi_image.shape[:2]
+        img_width_scaled = int(img_width * self.roi_scale)
+        img_height_scaled = int(img_height * self.roi_scale)
         
-        # Create a frame for the canvas
-        frame = ttk.Frame(roi_window)
-        frame.pack(fill=tk.BOTH, expand=True)
+        if (x < img_x or x > img_x + img_width_scaled or 
+            y < img_y or y > img_y + img_height_scaled):
+            return
         
-        # Create a canvas for displaying the image
-        canvas = tk.Canvas(frame)
-        canvas.pack(fill=tk.BOTH, expand=True)
+        # Delete any existing ROI rectangle
+        if self.roi_rect is not None:
+            self.proc_canvas.delete(self.roi_rect)
         
-        # Add scrollbars if the image is large
-        h_scrollbar = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
-        v_scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
-        canvas.configure(xscrollcommand=h_scrollbar.set, yscrollcommand=v_scrollbar.set)
+        self.roi_start_x = x
+        self.roi_start_y = y
         
-        h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-        v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Convert to PIL Image
-        pil_img = Image.fromarray(rgb_image)
-        
-        # Calculate scale factor to fit in window
-        img_height, img_width = rgb_image.shape[:2]
-        window_width = 800
-        window_height = 600
-        scale_x = window_width / img_width
-        scale_y = window_height / img_height
-        scale = min(scale_x, scale_y)
-        
-        # Calculate new dimensions
-        new_width = int(img_width * scale)
-        new_height = int(img_height * scale)
-        
-        # Resize the image
-        pil_img = pil_img.resize((new_width, new_height), Image.LANCZOS)
-        
-        # Convert to PhotoImage
-        tk_img = ImageTk.PhotoImage(pil_img)
-        
-        # Display the image on canvas
-        canvas.create_image(0, 0, anchor=tk.NW, image=tk_img)
-        canvas.image = tk_img  # Keep a reference to prevent garbage collection
-        
-        # Configure canvas scrolling region
-        canvas.configure(scrollregion=canvas.bbox("all"))
-        
-        # Variables for ROI selection
-        roi_start_x = None
-        roi_start_y = None
-        roi_rect = None
-        
-        # Function to start ROI selection
-        def start_roi(event):
-            nonlocal roi_start_x, roi_start_y, roi_rect
-            # Get canvas coordinates
-            x = canvas.canvasx(event.x)
-            y = canvas.canvasy(event.y)
-            roi_start_x = x
-            roi_start_y = y
-            # Create a rectangle
-            roi_rect = canvas.create_rectangle(
-                x, y, x, y, outline="red", width=2
-            )
-        
-        # Function to update ROI selection
-        def update_roi(event):
-            nonlocal roi_rect
-            if roi_start_x is not None and roi_start_y is not None:
-                # Get canvas coordinates
-                x = canvas.canvasx(event.x)
-                y = canvas.canvasy(event.y)
-                # Update rectangle
-                canvas.coords(roi_rect, roi_start_x, roi_start_y, x, y)
-        
-        # Function to end ROI selection
-        def end_roi(event):
-            nonlocal roi_start_x, roi_start_y, roi_rect
-            if roi_start_x is not None and roi_start_y is not None:
-                # Get canvas coordinates
-                x = canvas.canvasx(event.x)
-                y = canvas.canvasy(event.y)
-                
-                # Get the rectangle coordinates
-                x1 = min(roi_start_x, x)
-                y1 = min(roi_start_y, y)
-                x2 = max(roi_start_x, x)
-                y2 = max(roi_start_y, y)
-                
-                # Convert canvas coordinates to original image coordinates
-                orig_x1 = int(x1 / scale)
-                orig_y1 = int(y1 / scale)
-                orig_x2 = int(x2 / scale)
-                orig_y2 = int(y2 / scale)
-                
-                # Ensure coordinates are within image bounds
-                orig_x1 = max(0, orig_x1)
-                orig_y1 = max(0, orig_y1)
-                orig_x2 = min(img_width, orig_x2)
-                orig_y2 = min(img_height, orig_y2)
-                
-                # Close the ROI selection window
-                roi_window.destroy()
-                
-                # Process the selected ROI
-                self.process_selected_roi(orig_x1, orig_y1, orig_x2, orig_y2)
-        
-        # Bind mouse events
-        canvas.bind("<ButtonPress-1>", start_roi)
-        canvas.bind("<B1-Motion>", update_roi)
-        canvas.bind("<ButtonRelease-1>", end_roi)
-        
-        # Add instructions
-        instructions = ttk.Label(
-            roi_window,
-            text="Click and drag to select a region of interest, then release to process."
+        # Create a rectangle
+        self.roi_rect = self.proc_canvas.create_rectangle(
+            x, y, x, y, outline="red", width=2
         )
-        instructions.pack(side=tk.BOTTOM, pady=5)
+
+    def update_roi(self, event):
+        """Update ROI selection"""
+        if not self.roi_mode or self.roi_start_x is None or self.roi_rect is None:
+            return
+            
+        # Get canvas coordinates
+        x = event.x
+        y = event.y
+        
+        # Update rectangle
+        self.proc_canvas.coords(self.roi_rect, self.roi_start_x, self.roi_start_y, x, y)
+
+    def end_roi_drag(self, event):
+        """End ROI drag (but don't confirm yet)"""
+        # We don't process the ROI here, just finish the drag
+        # The ROI will be confirmed with Enter key or Confirm ROI button
+        pass
+
+    def confirm_roi(self, event=None):
+        """Confirm ROI selection with Enter key or button click"""
+        if not self.roi_mode or self.roi_start_x is None or self.roi_rect is None:
+            return
+            
+        # Get the rectangle coordinates
+        coords = self.proc_canvas.coords(self.roi_rect)
+        if len(coords) != 4:
+            return
+            
+        x1, y1, x2, y2 = coords
+        
+        # Ensure x1,y1 is the top-left and x2,y2 is the bottom-right
+        x1, x2 = min(x1, x2), max(x1, x2)
+        y1, y2 = min(y1, y2), max(y1, y2)
+        
+        # Convert canvas coordinates to original image coordinates
+        img_x, img_y = self.roi_image_pos
+        
+        # Adjust coordinates relative to the image position
+        x1 = x1 - img_x
+        y1 = y1 - img_y
+        x2 = x2 - img_x
+        y2 = y2 - img_y
+        
+        # Convert from scaled to original image coordinates
+        orig_x1 = int(x1 / self.roi_scale)
+        orig_y1 = int(y1 / self.roi_scale)
+        orig_x2 = int(x2 / self.roi_scale)
+        orig_y2 = int(y2 / self.roi_scale)
+        
+        # Ensure coordinates are within image bounds
+        img_height, img_width = self.roi_image.shape[:2]
+        orig_x1 = max(0, orig_x1)
+        orig_y1 = max(0, orig_y1)
+        orig_x2 = min(img_width, orig_x2)
+        orig_y2 = min(img_height, orig_y2)
+        
+        # Exit ROI selection mode
+        self.exit_roi_mode()
+        
+        # Process the selected ROI
+        self.process_selected_roi(orig_x1, orig_y1, orig_x2, orig_y2)
+
+    def exit_roi_mode(self):
+        """Exit ROI selection mode and clean up"""
+        self.roi_mode = False
+        
+        # Unbind events
+        self.proc_canvas.unbind("<ButtonPress-1>")
+        self.proc_canvas.unbind("<B1-Motion>")
+        self.proc_canvas.unbind("<ButtonRelease-1>")
+        self.root.unbind("<Return>")
+        
+        # Clear ROI variables
+        self.roi_start_x = None
+        self.roi_start_y = None
+        self.roi_rect = None
+        
+        # Hide instruction label
+        if self.roi_instruction_window is not None:
+            self.proc_canvas.delete(self.roi_instruction_window)
+            self.roi_instruction_window = None
+        
+        # Disable the confirm ROI button
+        self.confirm_roi_button.config(state=tk.DISABLED)
 
     def process_selected_roi(self, x1, y1, x2, y2):
         """Process the selected ROI"""
@@ -855,9 +941,6 @@ class stsmApp:
         # Draw the contours on the small contours image
         cv2.drawContours(small_contours_image, contours_minor_50, -1, (255, 0, 0), 3)
         
-        # Convert back to grayscale for display
-        #small_contours_image = cv2.cvtColor(small_contours_image, cv2.COLOR_BGR2GRAY)
-        
         # Add the processed image to the images list
         self.proc_images.append(small_contours_image)
 
@@ -866,9 +949,6 @@ class stsmApp:
 
         # Draw the contours on the large contours image
         cv2.drawContours(large_contours_image, contours_major_50, -1, (0, 255, 0), 3)
-        
-        # Convert back to grayscale for display
-        #large_contours_image = cv2.cvtColor(large_contours_image, cv2.COLOR_BGR2GRAY)
         
         # Add the processed image to the images list
         self.proc_images.append(large_contours_image)
