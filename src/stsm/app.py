@@ -246,26 +246,34 @@ class stsmApp:
         self.proc_save_frame = ttk.Frame(self.processing_frame_controls)
         
         # Add save buttons for each processed image
-        self.save_original_button = ttk.Button(
-            self.proc_save_frame,
-            text="Save Original ROI",
-            command=lambda: self.save_proc_image(0)
-        )
-        self.save_original_button.pack(pady=2)
-        
         self.save_small_contours_button = ttk.Button(
             self.proc_save_frame,
             text="Save Pores \u2264 50μm",
-            command=lambda: self.save_proc_image(1)
+            command=lambda: self.save_proc_image(0)
         )
         self.save_small_contours_button.pack(pady=2)
         
         self.save_large_contours_button = ttk.Button(
             self.proc_save_frame,
             text="Save Pores > 50μm",
-            command=lambda: self.save_proc_image(2)
+            command=lambda: self.save_proc_image(1)
         )
         self.save_large_contours_button.pack(pady=2)
+        
+        self.save_all_contours_button = ttk.Button(
+            self.proc_save_frame,
+            text="Save All Contours",
+            command=lambda: self.save_proc_image(2)
+        )
+        self.save_all_contours_button.pack(pady=2)
+        
+        # Add a button to save the original binary image without contours
+        self.save_original_binary_button = ttk.Button(
+            self.proc_save_frame,
+            text="Save Original Binary",
+            command=self.save_original_binary
+        )
+        self.save_original_binary_button.pack(pady=2)
         
         # Create a frame for image display in processing tab
         self.processing_frame_images = ttk.Frame(self.processing_frame)
@@ -292,7 +300,7 @@ class stsmApp:
             padding=5
         )
         self.roi_instruction_window = None
-
+        
     def show_layer_controls(self):
         """Show the unified layer control frame after images are loaded"""
         if not self.controls_visible:
@@ -894,14 +902,34 @@ class stsmApp:
         # Crop the original image to the selected ROI
         roi_image = self.original_image[y1:y2, x1:x2].copy()
         
-        # Convert to grayscale for processing
-        gray_roi = cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
+        # Check if the image is color (3 channels) or grayscale (1 channel)
+        if len(roi_image.shape) == 3:
+            # Convert to grayscale for processing
+            gray_roi = cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
+            
+            # Check if the image is already binary (only contains 0 and 255 values)
+            unique_values = np.unique(gray_roi)
+            if len(unique_values) <= 2 and np.all(np.isin(unique_values, [0, 255])):
+                # Image is already binary, no need to threshold
+                binary_roi = gray_roi
+            else:
+                # Apply thresholding to ensure binary image
+                _, binary_roi = cv2.threshold(gray_roi, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        else:
+            # Image is already grayscale
+            gray_roi = roi_image
+            
+            # Check if the image is already binary (only contains 0 and 255 values)
+            unique_values = np.unique(gray_roi)
+            if len(unique_values) <= 2 and np.all(np.isin(unique_values, [0, 255])):
+                # Image is already binary, no need to threshold
+                binary_roi = gray_roi
+            else:
+                # Apply thresholding to ensure binary image
+                _, binary_roi = cv2.threshold(gray_roi, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
-        # Apply thresholding to create a binary image
-        _, binary_roi = cv2.threshold(gray_roi, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        
-        # Store the original ROI as the first processed image
-        self.proc_images.append(binary_roi)
+        # Store the original binary image for later use
+        self.original_binary = binary_roi.copy()
         
         # Process the ROI to find contours
         self.process_mosaic(binary_roi)
@@ -912,48 +940,186 @@ class stsmApp:
         # Update the display
         self.update_proc_display()
 
+    def save_original_binary(self):
+        """Save the original binary image without contours"""
+        if not hasattr(self, 'original_binary') or self.original_binary is None:
+            messagebox.showwarning("Warning", "No original binary image available.")
+            return
+            
+        # Open file dialog to select save location
+        file_path = fd.asksaveasfilename(
+            title="Save Original Binary",
+            defaultextension=".tiff",
+            filetypes=[("TIFF files", "*.tiff"), ("All files", "*.*")]
+        )
+        
+        if not file_path:
+            return  # User cancelled
+            
+        try:
+            # Save the original binary image
+            cv2.imwrite(file_path, self.original_binary)
+            messagebox.showinfo("Success", f"Original binary image saved to '{os.path.basename(file_path)}'")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save image: {str(e)}")
+        
     def process_mosaic(self, image):
         """Process the loaded mosaic image to find contours"""
-        # Find contours
-        contours, _ = cv2.findContours(image, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
-
-        # Calculate the area of each contour
-        contours_by_area = [[contour, cv2.contourArea(contour)] for contour in contours]
-
-        # Segmenting contours by diameter lesser than 50 micras
+        # Find contours with hierarchy
+        contours, hierarchy = cv2.findContours(image, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Check if contours were found
+        if len(contours) == 0 or hierarchy is None:
+            messagebox.showwarning("Warning", "No contours found in the selected ROI.")
+            return
+        
+        # Flatten hierarchy array for easier access
+        hierarchy = hierarchy[0]
+        
+        # Create a list to store processed contours with their properties and hierarchy
+        # Format: [parent_contour, [child_contours], area, perimeter]
+        processed_contours = []
+        
+        # Process each contour
+        for i, contour in enumerate(contours):
+            # Check if this is a parent contour (no parent)
+            if hierarchy[i][3] == -1:  # [Next, Previous, First_Child, Parent]
+                # Calculate initial area and perimeter for the parent
+                parent_area = cv2.contourArea(contour)
+                parent_perimeter = cv2.arcLength(contour, True)
+                
+                # Find all children of this parent
+                child_idx = hierarchy[i][2]  # First child
+                children_area = 0
+                children_perimeter = 0
+                child_contours = []
+                
+                # Process all children
+                while child_idx != -1:
+                    child_contour = contours[child_idx]
+                    child_contours.append(child_contour)
+                    children_area += cv2.contourArea(child_contour)
+                    children_perimeter += cv2.arcLength(child_contour, True)
+                    
+                    # Move to the next child at the same level
+                    child_idx = hierarchy[child_idx][0]
+                
+                # Calculate final area and perimeter
+                final_area = parent_area - children_area
+                final_perimeter = parent_perimeter + children_perimeter
+                
+                # Add to processed contours list with parent, children, area, and perimeter
+                processed_contours.append([contour, child_contours, final_area, final_perimeter])
+        
+        # Store the processed contours for further analysis
+        self.processed_contours = processed_contours
+        
+        # Segmenting contours by diameter less than 50 micras
         # Converting diameter to pixels using the pixel calibration value
         D_pix = 50 * float(self.pixel_cal_input.get())
-
+        
         # Calculate the area of the circle with diameter D_pix
         area_50 = round(np.pi * (D_pix/2)**2)
-
+        
         # Create copies of the original image for drawing contours
+        all_contours_image = image.copy()
         small_contours_image = image.copy()
         large_contours_image = image.copy()
         
         # Convert to BGR for colored contours
+        all_contours_image = cv2.cvtColor(all_contours_image, cv2.COLOR_GRAY2BGR)
         small_contours_image = cv2.cvtColor(small_contours_image, cv2.COLOR_GRAY2BGR)
         large_contours_image = cv2.cvtColor(large_contours_image, cv2.COLOR_GRAY2BGR)
-
-        # Filter contours with area less than the area of the circle with diameter D_pix
-        contours_minor_50 = [contour for contour, area in contours_by_area if area <= area_50]
-
+        
+        # Prepare lists for small and large contours
+        small_contours = []
+        large_contours = []
+        all_contours = []
+        
+        # Collect all contours (parents and children)
+        for parent, children, area, perimeter in processed_contours:
+            all_contours.append(parent)
+            all_contours.extend(children)
+            
+            if area <= area_50:
+                small_contours.append(parent)
+                small_contours.extend(children)
+            else:
+                large_contours.append(parent)
+                large_contours.extend(children)
+        
+        # Draw all contours on the original image
+        cv2.drawContours(all_contours_image, all_contours, -1, (0, 0, 255), 2)  # Red color for all contours
+        
         # Draw the contours on the small contours image
-        cv2.drawContours(small_contours_image, contours_minor_50, -1, (255, 0, 0), 3)
+        cv2.drawContours(small_contours_image, small_contours, -1, (255, 0, 0), 2)  # Blue color
         
-        # Add the processed image to the images list
-        self.proc_images.append(small_contours_image)
-
-        # Filter contours with area major than the area of the circle with diameter D_pix
-        contours_major_50 = [contour for contour, area in contours_by_area if area > area_50]
-
         # Draw the contours on the large contours image
-        cv2.drawContours(large_contours_image, contours_major_50, -1, (0, 255, 0), 3)
+        cv2.drawContours(large_contours_image, large_contours, -1, (0, 255, 0), 2)  # Green color
         
-        # Add the processed image to the images list
+        # Clear previous images
+        self.proc_images = []
+        
+        # Add the processed images to the images list in the desired order
+        # First: Small contours
+        self.proc_images.append(small_contours_image)
+        # Second: Large contours
         self.proc_images.append(large_contours_image)
-
+        # Third (last): Original with all contours
+        self.proc_images.append(all_contours_image)
+        
+        # Update the layer names to reflect the new order
+        self.proc_layer_names = ["Pore \u2264 50μm", "Pore > 50μm", "All Contours"]
+        
+        # Set the default layer order to show the original with all contours on top
+        self.proc_layer_order = [0, 1, 2]  # This keeps the order as is, with all contours last/top
+        
+        
 if __name__ == "__main__":
     root = tk.Tk()
     app = stsmApp(root)
     root.mainloop()
+
+#RESERVED FOR FUTURE USE
+# Add this method to visualize individual parent-child groups
+def visualize_contour_group(self, index):
+    """Visualize a specific parent contour with its children"""
+    if not hasattr(self, 'processed_contours') or index >= len(self.processed_contours):
+        messagebox.showwarning("Warning", "No contour group available at this index.")
+        return
+    
+    # Get the parent and children contours
+    parent, children, area, perimeter = self.processed_contours[index]
+    
+    # Create a copy of the original binary image
+    if len(self.proc_images) > 0:
+        # Use the first processed image (binary)
+        if len(self.proc_images[0].shape) == 3:
+            # If it's already a color image, convert to grayscale
+            binary_image = cv2.cvtColor(self.proc_images[0], cv2.COLOR_BGR2GRAY)
+        else:
+            # If it's already grayscale, make a copy
+            binary_image = self.proc_images[0].copy()
+    else:
+        messagebox.showwarning("Warning", "No processed image available.")
+        return
+    
+    # Create a color image for visualization
+    vis_image = cv2.cvtColor(binary_image, cv2.COLOR_GRAY2BGR)
+    
+    # Draw the parent contour in blue
+    cv2.drawContours(vis_image, [parent], -1, (255, 0, 0), 2)
+    
+    # Draw the children contours in green
+    cv2.drawContours(vis_image, children, -1, (0, 255, 0), 2)
+    
+    # Add text with measurements
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(vis_image, f"Area: {area:.2f} px²", (10, 30), font, 0.7, (255, 255, 255), 2)
+    cv2.putText(vis_image, f"Perimeter: {perimeter:.2f} px", (10, 60), font, 0.7, (255, 255, 255), 2)
+    cv2.putText(vis_image, f"Children: {len(children)}", (10, 90), font, 0.7, (255, 255, 255), 2)
+    
+    # Display the image in a new window
+    cv2.imshow(f"Contour Group {index+1}", vis_image)
+    cv2.waitKey(0)
+    cv2.destroyWindow(f"Contour Group {index+1}")
