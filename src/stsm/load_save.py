@@ -1,11 +1,13 @@
 import tkinter as tk
 import cv2
 import tkinter.filedialog as fd
+import tkinter.simpledialog as sd
 import tkinter.messagebox as messagebox
 import os
 from layer_controls import show_layer_controls, hide_layer_controls, hide_proc_layer_controls
 from display import update_display, update_proc_display
 from roi import start_roi, update_roi, end_roi_drag, confirm_roi
+import openpyxl as opxl
 
 def load_image(self):
     # Clear previous images
@@ -183,3 +185,61 @@ def save_original_binary(self):
         messagebox.showinfo("Success", f"Original binary image saved to '{os.path.basename(file_path)}'")
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save image: {str(e)}")
+
+def save_gpd_stats(self):
+    """Save the global pore statistics to a file"""
+    if not hasattr(self, 'summary') or self.summary is None:
+        messagebox.showwarning("Warning", "No global pore statistics available.")
+        return
+        
+    # Open dialog to select save location directory
+    file_path = fd.askdirectory(
+        title="Select Directory to Save Global Pore Stats"
+    )
+    
+    if not file_path:
+        messagebox.showwarning("Warning", "No directory selected.")
+        return  # User cancelled
+    file_path = os.path.abspath(file_path)  # Get absolute path
+    print(file_path)    
+    try:
+        # Save the summary to a Excel file using openpyxl
+        if not os.path.exists(file_path + "/Global_Pore_Stats.xlsx"):
+            # If file does not exist, create a new workbook and worksheet
+            wb = opxl.Workbook()
+            ws = wb.active
+            ws.title = "Global Pore Stats"
+            
+            # Write headers
+            headers = ["Mosaic Name",
+                "Number of parent contours",
+                "Number of child contours",
+                "Porosity",
+                "Number of parent contours <= 50μm",
+                "Number of child contours <= 50μm",
+                "Percentage of pores <= 50μm",
+                "Number of parent contours > 50μm",
+                "Number of child contours > 50μm",
+                "Percentage of pores > 50μm"
+            ]
+            ws.append(headers)
+        else:
+            # If file exists, load the existing workbook and worksheet
+            wb = opxl.load_workbook(file_path + "/Global_Pore_Stats.xlsx")
+            ws = wb.active
+        
+        # Enter the mosaic name to append the mosaic name to the summary
+        mosaic_name = sd.askstring("Mosaic Name", "Enter the name of the mosaic:")
+        if not mosaic_name:
+            messagebox.showwarning("Warning", "No mosaic name provided.")
+            return  # User cancelled
+        self.summary = (mosaic_name, ) + self.summary
+
+        # Append the summary to the worksheet
+        ws.append(self.summary)
+        wb.save(file_path + "/Global_Pore_Stats.xlsx")
+        wb.close()
+            
+        messagebox.showinfo("Success", f"Global pore statistics saved to '{os.path.basename(file_path) + '/Global_Pore_Stats.xlsx'}'")
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to save statistics: {str(e)}")

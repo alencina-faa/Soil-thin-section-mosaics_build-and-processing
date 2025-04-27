@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-from load_save import load_mosaic, save_proc_image, save_original_binary
+from load_save import load_mosaic, save_proc_image, save_original_binary, save_gpd_stats
 from display import update_proc_display
 from roi import confirm_roi
 
@@ -123,6 +123,14 @@ def processing_tab(self):
         command= lambda: save_original_binary(self)
     )
     self.save_original_binary_button.pack(pady=2)
+
+    # Create a buton to save Global Pore Stats
+    self.save_global_pore_stats_button = ttk.Button(
+        self.proc_save_frame,
+        text="Save Global Pore Stats",
+        command = lambda: save_gpd_stats(self)
+    )
+    self.save_global_pore_stats_button.pack(pady=2)
     
     # Create a frame for image display in processing tab
     self.processing_frame_images = ttk.Frame(self.processing_frame)

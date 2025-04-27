@@ -68,6 +68,12 @@ if __name__ == "__main__":
     app = stsmApp(root)
     root.mainloop()
 
+
+
+
+
+
+
 #RESERVED FOR FUTURE USE
 # Add this method to visualize individual parent-child groups
 def visualize_contour_group(self, index):
