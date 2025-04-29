@@ -160,3 +160,6 @@ cython_debug/
 #.idea/
 src/stsm/app_verce.py
 .vscode/settings.json
+src/stsm/hdf5_contour_advanced.py
+src/stsm/edge_contour_detection.py
+src/stsm/optimized_edge_detection.py

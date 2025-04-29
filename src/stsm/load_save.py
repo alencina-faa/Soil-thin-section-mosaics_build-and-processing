@@ -8,6 +8,8 @@ from layer_controls import show_layer_controls, hide_layer_controls, hide_proc_l
 from display import update_display, update_proc_display
 from roi import start_roi, update_roi, end_roi_drag, confirm_roi
 import openpyxl as opxl
+import h5py
+
 
 def load_image(self):
     # Clear previous images
@@ -113,7 +115,10 @@ def load_mosaic(self):
     
     # Enable the confirm ROI button
     self.confirm_roi_button.config(state=tk.NORMAL)
-    
+
+    # Enable the Global Pore Stats button
+    self.save_mosaic_stats_data_button.config(state=tk.NORMAL)
+
     # Show a message to the user
     messagebox.showinfo("Select ROI", "Click and drag to select a Region Of Interest. Press Enter or click 'Confirm ROI' button when done.")
 
@@ -163,45 +168,55 @@ def save_proc_image(self, index):
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save image: {str(e)}")
 
-def save_original_binary(self):
-    """Save the original binary image without contours"""
-    if not hasattr(self, 'original_binary') or self.original_binary is None:
-        messagebox.showwarning("Warning", "No original binary image available.")
-        return
-        
-    # Open file dialog to select save location
-    file_path = fd.asksaveasfilename(
-        title="Save Original Binary",
-        defaultextension=".tiff",
-        filetypes=[("TIFF files", "*.tiff"), ("All files", "*.*")]
-    )
-    
-    if not file_path:
-        return  # User cancelled
-        
-    try:
-        # Save the original binary image
-        cv2.imwrite(file_path, self.original_binary)
-        messagebox.showinfo("Success", f"Original binary image saved to '{os.path.basename(file_path)}'")
-    except Exception as e:
-        messagebox.showerror("Error", f"Failed to save image: {str(e)}")
 
-def save_gpd_stats(self):
-    """Save the global pore statistics to a file"""
-    if not hasattr(self, 'summary') or self.summary is None:
-        messagebox.showwarning("Warning", "No global pore statistics available.")
-        return
-        
-    # Open dialog to select save location directory
+def save_mosaic_stats_data(self):
+        # Open dialog to select save location directory
     file_path = fd.askdirectory(
         title="Select Directory to Save Global Pore Stats"
     )
-    
+
     if not file_path:
         messagebox.showwarning("Warning", "No directory selected.")
         return  # User cancelled
     file_path = os.path.abspath(file_path)  # Get absolute path
-    print(file_path)    
+
+    # Enter the mosaic name to append the mosaic name to the summary
+    mosaic_name = sd.askstring("Mosaic Name", "Enter the name of the mosaic:")
+    if not mosaic_name:
+        messagebox.showwarning("Warning", "No mosaic name provided.")
+        return  # User cancelled
+
+    save_original_binary(self, file_path, mosaic_name)
+    save_gpd_stats(self, file_path, mosaic_name)
+    save_enhanced_contours_hdf5(self, file_path, mosaic_name)
+
+
+
+def save_original_binary(self, file_path, mosaic_name):
+    """Save the original binary image without contours"""
+    if not hasattr(self, 'original_binary') or self.original_binary is None:
+        messagebox.showwarning("Warning", "No original binary image available.")
+        return
+    
+    # Builds the path to save the binary file
+    binary_file_path = os.path.join(file_path, mosaic_name, mosaic_name + ".tiff")
+    # Creates the directory if does not exist
+    os.makedirs(os.path.dirname(binary_file_path), exist_ok=True) 
+
+    try:
+        # Save the original binary image
+        cv2.imwrite(binary_file_path, self.original_binary)
+        messagebox.showinfo("Success", f"Original binary image saved to '{os.path.basename(binary_file_path)}'")
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to save image: {str(e)}")
+
+
+def save_gpd_stats(self, file_path, mosaic_name):
+    """Save the global pore statistics to a file"""
+    if not hasattr(self, 'summary') or self.summary is None:
+        messagebox.showwarning("Warning", "No global pore statistics available.")
+        return
+       
     try:
         # Save the summary to a Excel file using openpyxl
         if not os.path.exists(file_path + "/Global_Pore_Stats.xlsx"):
@@ -216,10 +231,10 @@ def save_gpd_stats(self):
                 "Number of child contours",
                 "Porosity",
                 "Number of parent contours <= 50μm",
-                "Number of child contours <= 50μm",
+                "Number of child contours\n(parent <= 50μm)",
                 "Percentage of pores <= 50μm",
                 "Number of parent contours > 50μm",
-                "Number of child contours > 50μm",
+                "Number of child contours\n(parent > 50μm)",
                 "Percentage of pores > 50μm"
             ]
             ws.append(headers)
@@ -228,18 +243,80 @@ def save_gpd_stats(self):
             wb = opxl.load_workbook(file_path + "/Global_Pore_Stats.xlsx")
             ws = wb.active
         
-        # Enter the mosaic name to append the mosaic name to the summary
-        mosaic_name = sd.askstring("Mosaic Name", "Enter the name of the mosaic:")
-        if not mosaic_name:
-            messagebox.showwarning("Warning", "No mosaic name provided.")
-            return  # User cancelled
         self.summary = (mosaic_name, ) + self.summary
 
         # Append the summary to the worksheet
         ws.append(self.summary)
         wb.save(file_path + "/Global_Pore_Stats.xlsx")
         wb.close()
+
+        # Disable the Global Pore Stats button
+        self.save_mosaic_stats_data_button.config(state=tk.DISABLED)
             
         messagebox.showinfo("Success", f"Global pore statistics saved to '{os.path.basename(file_path) + '/Global_Pore_Stats.xlsx'}'")
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save statistics: {str(e)}")
+
+def save_enhanced_contours_hdf5(self, file_path, mosaic_name):
+    """
+    Save contours with edge information to HDF5 file.
+    
+    Args:
+        contour_data: List of [index, is_edge, parent, [children], area, perimeter]
+        filename: Output HDF5 filename
+    """
+    """Save the processed contours to a file"""
+    if not hasattr(self, 'processed_contours') or self.processed_contours is None:
+        messagebox.showwarning("Warning", "No processed contours available.")
+        return
+    
+    # Builds the path to save the h5 file
+    filename = os.path.join(file_path, mosaic_name, mosaic_name + ".h5")
+    # Creates the directory if does not exist
+    os.makedirs(os.path.dirname(filename), exist_ok=True) 
+
+    contour_data = self.processed_contours
+
+    try:
+        with h5py.File(filename, 'w') as f:
+            # Create a group for all contours
+            contours_group = f.create_group("contours")
+            
+            # Store metadata about the dataset
+            f.attrs['num_contours'] = len(contour_data)
+                    
+            # Create groups for edge and interior contours for easy filtering
+            edge_group = f.create_group("edge_contours")
+            interior_group = f.create_group("interior_contours")
+            
+            # Create a group for each contour with its index as the name for direct access
+            for idx, is_edge, parent, children, area, perimeter in contour_data:
+                # Use the index as the group name for direct access
+                contour_group = contours_group.create_group(f"{idx}")
+                
+                # Store the index and edge flag as attributes
+                contour_group.attrs['index'] = idx
+                contour_group.attrs['is_edge'] = is_edge
+                contour_group.attrs['area'] = area
+                contour_group.attrs['perimeter'] = perimeter
+                
+                # Save parent contour
+                parent_dataset = contour_group.create_dataset('parent', data=parent)
+                
+                # Save metadata about children
+                contour_group.attrs['num_children'] = len(children)
+                
+                # Create a group for children
+                if children:
+                    children_group = contour_group.create_group('children')
+                    for j, child in enumerate(children):
+                        child_dataset = children_group.create_dataset(f"{j}", data=child)
+                
+                # Add reference to edge or interior group
+                if is_edge:
+                    edge_group[f"{idx}"] = contour_group.ref
+                else:
+                    interior_group[f"{idx}"] = contour_group.ref
+        messagebox.showinfo("Success", f"Processed contours saved to '{os.path.basename(filename)}'")
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to save processed contours: {str(e)}")

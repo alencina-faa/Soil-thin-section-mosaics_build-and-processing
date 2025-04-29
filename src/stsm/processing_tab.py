@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-from load_save import load_mosaic, save_proc_image, save_original_binary, save_gpd_stats
+from load_save import load_mosaic, save_proc_image, save_original_binary, save_mosaic_stats_data
 from display import update_proc_display
 from roi import confirm_roi
 
@@ -97,40 +97,40 @@ def processing_tab(self):
     # Add save buttons for each processed image
     self.save_small_contours_button = ttk.Button(
         self.proc_save_frame,
-        text="Save Pores \u2264 50μm",
+        text="Save Image of Pores \u2264 50μm",
         command=lambda: save_proc_image(self, 0)
     )
     self.save_small_contours_button.pack(pady=2)
     
     self.save_large_contours_button = ttk.Button(
         self.proc_save_frame,
-        text="Save Pores > 50μm",
+        text="Save Image of Pores > 50μm",
         command=lambda: save_proc_image(self, 1)
     )
     self.save_large_contours_button.pack(pady=2)
     
     self.save_all_contours_button = ttk.Button(
         self.proc_save_frame,
-        text="Save All Contours",
+        text="Save Image of All Contours",
         command=lambda: save_proc_image(self, 2)
     )
     self.save_all_contours_button.pack(pady=2)
     
     # Add a button to save the original binary image without contours
-    self.save_original_binary_button = ttk.Button(
-        self.proc_save_frame,
-        text="Save Original Binary",
-        command= lambda: save_original_binary(self)
-    )
-    self.save_original_binary_button.pack(pady=2)
+    # self.save_original_binary_button = ttk.Button(
+    #     self.proc_save_frame,
+    #     text="Save Original Binary",
+    #     command= lambda: save_original_binary(self)
+    # )
+    # self.save_original_binary_button.pack(pady=2)
 
     # Create a buton to save Global Pore Stats
-    self.save_global_pore_stats_button = ttk.Button(
+    self.save_mosaic_stats_data_button = ttk.Button(
         self.proc_save_frame,
-        text="Save Global Pore Stats",
-        command = lambda: save_gpd_stats(self)
+        text="Save Mosaic Stats & Data",
+        command = lambda: save_mosaic_stats_data(self)
     )
-    self.save_global_pore_stats_button.pack(pady=2)
+    self.save_mosaic_stats_data_button.pack(pady=2)
     
     # Create a frame for image display in processing tab
     self.processing_frame_images = ttk.Frame(self.processing_frame)
