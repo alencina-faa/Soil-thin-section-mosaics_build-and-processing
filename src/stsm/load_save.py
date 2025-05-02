@@ -82,7 +82,7 @@ def load_mosaic(self):
     # Open file dialog to select image
     file_path = fd.askopenfilename(
         title="Select a Mosaic",
-        filetypes=[("Image files", "*.jpg *.jpeg *.png *.tif *.tiff")]
+        filetypes=[("Image files", "*.jpg *.jpeg *.bmp *.png *.tif *.tiff")]
     )
     
     if not file_path:
@@ -189,7 +189,7 @@ def save_mosaic_stats_data(self):
     save_original_binary(self, file_path, mosaic_name)
     save_gpd_stats(self, file_path, mosaic_name)
     save_enhanced_contours_hdf5(self, file_path, mosaic_name)
-
+    save_segmented_pore_data(self, file_path, mosaic_name)
 
 
 def save_original_binary(self, file_path, mosaic_name):
@@ -320,3 +320,82 @@ def save_enhanced_contours_hdf5(self, file_path, mosaic_name):
         messagebox.showinfo("Success", f"Processed contours saved to '{os.path.basename(filename)}'")
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save processed contours: {str(e)}")
+
+def save_segmented_pore_data(self, file_path, mosaic_name):
+    """Save the segmented pores to xlsx fils"""
+    if not hasattr(self, 'processed_cont_great_50_sz') or self.processed_cont_great_50_sz is None:
+        messagebox.showwarning("Warning", "No segmented pores available.")
+        return
+        
+    try:     
+        # Segmented pores are saved according to the defined shape-size combinations.
+        for shape in self.shapes:
+            
+            # Builds the path to save the h5 file
+            filename = os.path.join(file_path, mosaic_name, mosaic_name + "_" + shape["name"] + ".xlsx")
+            
+            # Save the summary to a Excel file using openpyxl
+            if not os.path.exists(filename):
+                # If file does not exist, create a new workbook and worksheet
+                wb = opxl.Workbook()
+                wb.remove(wb.active)
+            else:
+                messagebox.showwarning("Warning", "File with segmented pore info already exist.")
+                return
+        
+            for i, size in enumerate(self.sizes):
+                # Skip invalid shape-size combinations
+                if (
+                    (shape["name"] != "elongated" and size["name"] in ["edS", "edM", "edL", "edXL"]) or
+                    (shape["name"] != "circ" and size["name"] in ["emdS", "emdM", "emdL", "emdXL"]) or
+                    ((shape["name"] not in ["circ", "MLcirc"]) and size["name"] in ["rmsS", "rmsM", "rmsL", "rmsXL"])
+                ):
+                    
+                    ws = wb.create_sheet(size["name"], i)
+                                        
+                    # Write headers
+                    headers = [
+                        "Pore id",
+                        "is_edge",
+                        "Area",
+                        "Perimeter",
+                        "Shape",
+                        "Convex Shape",
+                        "Pore elongation",
+                        "Irregular",
+                        "Slightly irregulars",
+                        "Slightly regulars",
+                        "Regulars"
+                        "Equivalent diameter" if size["name"] in ["edS", "edM", "edL", "edXL"] else
+                        "Ellipse minor diameter" if size["name"] in ["emdS", "emdM", "emdL", "emdXL"] else
+                        "Rectangle minor side",
+                        None if size["name"] in ["edS", "edM", "edL", "edXL"] else
+                        "Ellipse major diameter" if size["name"] in ["emdS", "emdM", "emdL", "emdXL"] else
+                        "Rectangle major side",  
+                        "Angle" if shape["name"] == "elongated" else None,  # Ellipse angle
+                    ]
+                    ws.append(headers)
+                
+
+                    try:
+                        # Append the segmented pore data to the worksheet
+                        for row in self.processed_cont_great_50_sz.get((shape["name"], size["name"]), []):
+                            ws.append(row)
+                    except Exception as e:
+                        messagebox.showerror("Error", f"Failed to append data to {shape["name"]}: {str(e)}") 
+                        return    
+
+            try:
+                wb.save(filename)
+                wb.close()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to create {filename}: {str(e)}") 
+                return    
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to create xlsx file to save segmented pore info: {str(e)}") 
+        return
+
+
+                        
+    messagebox.showinfo("Success", f"Segmented pore data saved to .xlsx files in'{os.path.basename(file_path) + '/' + mosaic_name}'")
+                

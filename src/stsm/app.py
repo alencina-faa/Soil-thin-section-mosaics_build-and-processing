@@ -43,16 +43,16 @@ class stsmApp:
         self.notebook.pack(fill=tk.BOTH, expand=True)
         
         # Create the tabs
-        self.acquire_frame = ttk.Frame(self.notebook)
-        self.build_frame = ttk.Frame(self.notebook)
-        self.align_frame = ttk.Frame(self.notebook)
+        #self.acquire_frame = ttk.Frame(self.notebook)
+        #self.build_frame = ttk.Frame(self.notebook)
+        #self.align_frame = ttk.Frame(self.notebook)
         self.binary_frame = ttk.Frame(self.notebook)
         self.processing_frame = ttk.Frame(self.notebook)
         
         # Add tabs to notebook
-        self.notebook.add(self.acquire_frame, text="Acquire")
-        self.notebook.add(self.build_frame, text="Build")
-        self.notebook.add(self.align_frame, text="Align")
+        #self.notebook.add(self.acquire_frame, text="Acquire")
+        #self.notebook.add(self.build_frame, text="Build")
+        #self.notebook.add(self.align_frame, text="Align")
         self.notebook.add(self.binary_frame, text="Binary")
         self.notebook.add(self.processing_frame, text="Processing")
         

@@ -1,6 +1,7 @@
 import cv2
 from tkinter import messagebox
 import numpy as np
+import math as m
 
 def process_mosaic(self, image):
     # Store the image for further analysis
@@ -14,7 +15,8 @@ def process_mosaic(self, image):
     
     # Segmenting contours by diameter less than 50 micron
     # Converting diameter to pixels using the pixel calibration value
-    D_pix = 50 * float(self.pixel_cal_input.get())
+    self.calibration = float(self.pixel_cal_input.get())
+    D_pix = 50 * self.calibration
     
     # Calculate the area of the circle with diameter D_pix
     self.area_50 = round(np.pi * (D_pix/2)**2)
@@ -279,4 +281,99 @@ def proc_cont_all(self):
     
     
 def proc_cont_great_50(self):
-    pass
+    # Segment contours (pores from now on...) with an area greather than the area of a pore with a diameter of 50 micron
+    processed_cont_great_50= [
+        [
+            cont[0], #id
+            cont[1], #is_edge
+            cont[4], #area
+            cont[5], #perimeter
+            S := 4 * m.pi * cont[4] / cont[5]**2, #Shape = 4 pi area / perimeter^2
+            C := float(4 * m.pi * (cv2.contourArea(cv2.convexHull(cont[2])) -
+                             np.sum([cv2.contourArea(cv2.convexHull(contch)) for contch in cont[3]]))/cont[5]**2), #Convex Shape = 4 pi Convex_area / perimeter^2
+            m.sqrt(S**2 + C**2) , #Pore elongation
+            m.atan(S/C)*180/m.pi, #Pore irragularity (deg)
+            2 * m.sqrt(cont[4] / m.pi) / self.calibration, #Equivalent diameter = 2 sqrt(area / pi) / self.calibration
+            cv2.fitEllipse(cont[2])[1][1], #Ellipse minor diameter
+            cv2.fitEllipse(cont[2])[1][0], #Ellipse major diameter
+            cv2.fitEllipse(cont[2])[2], # Ellipse angle
+            cont[4] - m.sqrt(cont[5]**2 - 16 * cont[4]) if S < m.pi / 4 else None,  # Rectangle minor side
+            cont[4] + m.sqrt(cont[5]**2 - 16 * cont[4]) if S < m.pi / 4 else None #Rectangle major side
+            ] 
+                for cont in self.processed_contours if cont[4] > self.area_50]
+        
+    # Shapes of interest are defined in a dictionary with min and max values
+    self.shapes = [
+        {"name": "circ", "min": 0.8, "max": 1}, # Circular
+        {"name": "MLcirc", "min": 0.5, "max": 0.8}, # More or Less circular
+        {"name": "shpless", "min": 0.2, "max": 0.5}, # Shapeless
+        {"name": "elongated", "min": 0.0, "max": 0.2}, # Elongated 
+    ]
+
+    # Sizes of interest are defined in a dictionary with min and max values
+    self.sizes = [
+        {"name": "edS", "min": 0, "max": 50},           # ed -> Equivalent diameter;        S -> small
+        {"name": "edM", "min": 50, "max": 300},         #                                   M -> medium
+        {"name": "edL", "min": 300, "max": 1000},       #                                   L -> large
+        {"name": "edXL", "min": 100, "max": 100000},    #                                   XL -> extra earge
+        {"name": "emdS", "min": 0, "max": 50},          # emd -> Ellipse minor diameter;    S -> small
+        {"name": "emdM", "min": 50, "max": 300},        #                                   M -> medium
+        {"name": "emdL", "min": 300, "max": 1000},      #                                   L -> large
+        {"name": "emdXL", "min": 100, "max": 100000},   #                                   XL -> extra earge   
+        {"name": "rmsS", "min": 0, "max": 50},          # rms -> Rectangle minor side;         S -> small
+        {"name": "rmsM", "min": 50, "max": 300},        #                                   M -> medium
+        {"name": "rmsL", "min": 300, "max": 1000},      #                                   L -> large
+        {"name": "rmsXL", "min": 100, "max": 100000},   #                                   XL -> extra earge
+    ]                            
+
+    # All the results segmented according shape an size are stored in a dict
+    self.processed_cont_great_50_sz = {}
+
+    # Pores are segmented according the defined shape-size combinations.
+    for shape in self.shapes:
+        for size in self.sizes:
+            # Skip invalid shape-size combinations
+            if (
+                (shape["name"] != "elongated" and size["name"] in ["edS", "edM", "edL", "edXL"]) or
+                (shape["name"] != "circ" and size["name"] in ["emdS", "emdM", "emdL", "emdXL"]) or
+                ((shape["name"] not in ["circ", "MLcirc"]) and size["name"] in ["rmsS", "rmsM", "rmsL", "rmsXL"])
+            ):
+                for cont in processed_cont_great_50:
+                    # Determine the size metric based on shape and size
+                    size_metric = (
+                        cont[8] if size["name"] in ["edS", "edM", "edL", "edXL"] else #Equivalent diameter
+                        cont[9] if size["name"] in ["emdS", "emdM", "emdL", "emdXL"] else #Ellipse minor diameter
+                        cont[12] #Rectangle minor side
+                    )
+
+                    # Check if the contour matches the shape and size criteria
+                    if shape["min"] < cont[4] <= shape["max"] and size["min"] < size_metric <= size["max"]:
+                        # Use (shape["name"], size["name"]) as the key in the dictionary
+                        key = (shape["name"], size["name"])
+                        if key not in self.processed_cont_great_50_sz:
+                            self.processed_cont_great_50_sz[key] = []
+
+                        # Append the processed contour data to the dictionary
+                        self.processed_cont_great_50_sz[key].append([
+                            cont[0],  # idx
+                            str(cont[1]),  # is_edge
+                            cont[2],  # area
+                            cont[3],  # perimeter
+                            cont[4],  # Shape
+                            cont[5],  # Convex Shape
+                            cont[6],  # Pore elongation
+                            cont[7] if cont[7] <= 13.5 else None,  # Irregulars theta <= 13.5°
+                            cont[7] if 13.5 < cont[7] <= 22.5 else None,  # Slightly irregulars
+                            cont[7] if 22.5 < cont[7] <= 31.5 else None,  # Slightly regulars
+                            cont[7] if 31.5 < cont[7] else "",  # Regulars
+                            size_metric,  # Size metric (Equivalent diameter, Ellipse minor diameter, etc.)
+                            None if size["name"] in ["edS", "edM", "edL", "edXL"] else #For circular shaped pores
+                            cont[10] if size["name"] in ["emdS", "emdM", "emdL", "emdXL"] else #Ellipse major diameter
+                            cont[13],  # Rectangle major side
+                            cont[11] if shape["name"] == "elongated" else None,  # Ellipse angle
+                        ])
+
+
+    # Example: Accessing the processed data
+    #print(self.processed_cont_great_50_sz.get(("circ", "edM"), []))
+

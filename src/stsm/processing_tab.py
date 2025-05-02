@@ -28,7 +28,7 @@ def processing_tab(self):
     # Create a button to load the mosaic to be processed
     self.load_mosaic_button = ttk.Button(
         self.processing_frame_controls, 
-        text="Load Mosaic", 
+        text="Load Image", 
         command= lambda: load_mosaic(self)
     )
     self.load_mosaic_button.pack(pady=5)
@@ -127,7 +127,7 @@ def processing_tab(self):
     # Create a buton to save Global Pore Stats
     self.save_mosaic_stats_data_button = ttk.Button(
         self.proc_save_frame,
-        text="Save Mosaic Stats & Data",
+        text="Save Stats & Data",
         command = lambda: save_mosaic_stats_data(self)
     )
     self.save_mosaic_stats_data_button.pack(pady=2)
@@ -143,7 +143,7 @@ def processing_tab(self):
     # Add a label to show when no images are loaded in processing tab
     self.proc_no_image_label = ttk.Label(
         self.proc_canvas, 
-        text="No mosaic loaded. Click 'Load Mosaic' to begin.",
+        text="No Image loaded. Click 'Load Image' to begin.",
     )
     
     self.proc_canvas.create_window(640, 360, window=self.proc_no_image_label)
