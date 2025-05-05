@@ -163,3 +163,4 @@ src/stsm/app_verce.py
 src/stsm/hdf5_contour_advanced.py
 src/stsm/edge_contour_detection.py
 src/stsm/optimized_edge_detection.py
+/output
