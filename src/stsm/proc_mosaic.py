@@ -294,11 +294,11 @@ def proc_cont_great_50(self):
             m.sqrt(S**2 + C**2) , #Pore elongation
             m.atan(S/C)*180/m.pi, #Pore irragularity (deg)
             2 * m.sqrt(cont[4] / m.pi) / self.calibration, #Equivalent diameter = 2 sqrt(area / pi) / self.calibration
-            cv2.fitEllipse(cont[2])[1][1], #Ellipse minor diameter
-            cv2.fitEllipse(cont[2])[1][0], #Ellipse major diameter
+            cv2.fitEllipse(cont[2])[1][0], #Ellipse minor diameter
+            cv2.fitEllipse(cont[2])[1][1], #Ellipse major diameter
             cv2.fitEllipse(cont[2])[2], # Ellipse angle
-            cont[4] - m.sqrt(cont[5]**2 - 16 * cont[4]) if S < m.pi / 4 else None,  # Rectangle minor side
-            cont[4] + m.sqrt(cont[5]**2 - 16 * cont[4]) if S < m.pi / 4 else None #Rectangle major side
+            cont[5] - m.sqrt(cont[5]**2 - 16 * cont[4])/4 if S < m.pi / 4 else None,  # Rectangle minor side
+            cont[5] + m.sqrt(cont[5]**2 - 16 * cont[4])/4 if S < m.pi / 4 else None #Rectangle major side
             ] 
                 for cont in self.processed_contours if cont[4] > self.area_50]
         
@@ -315,15 +315,15 @@ def proc_cont_great_50(self):
         {"name": "edS", "min": 0, "max": 50},           # ed -> Equivalent diameter;        S -> small
         {"name": "edM", "min": 50, "max": 300},         #                                   M -> medium
         {"name": "edL", "min": 300, "max": 1000},       #                                   L -> large
-        {"name": "edXL", "min": 100, "max": 100000},    #                                   XL -> extra earge
+        {"name": "edXL", "min": 1000, "max": 100000},    #                                   XL -> extra earge
         {"name": "emdS", "min": 0, "max": 50},          # emd -> Ellipse minor diameter;    S -> small
         {"name": "emdM", "min": 50, "max": 300},        #                                   M -> medium
         {"name": "emdL", "min": 300, "max": 1000},      #                                   L -> large
-        {"name": "emdXL", "min": 100, "max": 100000},   #                                   XL -> extra earge   
+        {"name": "emdXL", "min": 1000, "max": 100000},   #                                   XL -> extra earge   
         {"name": "rmsS", "min": 0, "max": 50},          # rms -> Rectangle minor side;         S -> small
         {"name": "rmsM", "min": 50, "max": 300},        #                                   M -> medium
         {"name": "rmsL", "min": 300, "max": 1000},      #                                   L -> large
-        {"name": "rmsXL", "min": 100, "max": 100000},   #                                   XL -> extra earge
+        {"name": "rmsXL", "min": 1000, "max": 100000},   #                                   XL -> extra earge
     ]                            
 
     # All the results segmented according shape an size are stored in a dict
