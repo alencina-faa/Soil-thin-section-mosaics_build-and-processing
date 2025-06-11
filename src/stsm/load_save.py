@@ -365,7 +365,7 @@ def save_segmented_pore_data(self, file_path, mosaic_name):
                         "Irregular",
                         "Slightly irregulars",
                         "Slightly regulars",
-                        "Regulars"
+                        "Regulars",
                         "Equivalent diameter" if size["name"] in ["edS", "edM", "edL", "edXL"] else
                         "Ellipse minor diameter" if size["name"] in ["emdS", "emdM", "emdL", "emdXL"] else
                         "Rectangle minor side",
