@@ -297,8 +297,8 @@ def proc_cont_great_50(self):
             cv2.fitEllipse(cont[2])[1][0], #Ellipse minor diameter
             cv2.fitEllipse(cont[2])[1][1], #Ellipse major diameter
             cv2.fitEllipse(cont[2])[2], # Ellipse angle
-            cont[5] - m.sqrt(cont[5]**2 - 16 * cont[4])/4 if S < m.pi / 4 else None,  # Rectangle minor side
-            cont[5] + m.sqrt(cont[5]**2 - 16 * cont[4])/4 if S < m.pi / 4 else None #Rectangle major side
+            (cont[5] - m.sqrt(cont[5]**2 - 16 * cont[4]))/4 if S < m.pi / 4 else None,  # Rectangle minor side
+            (cont[5] + m.sqrt(cont[5]**2 - 16 * cont[4]))/4 if S < m.pi / 4 else None #Rectangle major side
             ] 
                 for cont in self.processed_contours if cont[4] > self.area_50]
         
