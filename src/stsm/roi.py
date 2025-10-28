@@ -5,6 +5,35 @@ from layer_controls import show_proc_layer_controls
 from display import update_proc_display
 from proc_mosaic import process_mosaic
 
+def set_confirm_roi_button_visible(self, visible: bool):
+    """Show/hide and enable/disable the Confirm ROI button safely.
+
+    Works with grid/pack/place. If button attribute doesn't exist, it's a no-op.
+    """
+    if not hasattr(self, "confirm_roi_button") or self.confirm_roi_button is None:
+        return
+    try:
+        mgr = self.confirm_roi_button.winfo_manager()
+        if visible:
+            # Restore according to manager
+            if mgr == "grid":
+                self.confirm_roi_button.grid()
+            elif mgr == "pack":
+                self.confirm_roi_button.pack()
+            # For place, assume caller will place with coordinates elsewhere
+            self.confirm_roi_button.config(state=tk.NORMAL)
+        else:
+            if mgr == "grid":
+                self.confirm_roi_button.grid_remove()
+            elif mgr == "pack":
+                self.confirm_roi_button.pack_forget()
+            elif mgr == "place":
+                self.confirm_roi_button.place_forget()
+            self.confirm_roi_button.config(state=tk.DISABLED)
+    except Exception:
+        # Fallback: ensure at least the state is correct
+        self.confirm_roi_button.config(state=(tk.NORMAL if visible else tk.DISABLED))
+
 def start_roi(self, event):
     """Start ROI selection"""
     if not self.roi_mode:
@@ -118,8 +147,8 @@ def exit_roi_mode(self):
         self.proc_canvas.delete(self.roi_instruction_window)
         self.roi_instruction_window = None
     
-    # Disable the confirm ROI button
-    self.confirm_roi_button.config(state=tk.DISABLED)
+    # Hide and disable the confirm ROI button
+    set_confirm_roi_button_visible(self, False)
 
 def process_selected_roi(self, x1, y1, x2, y2):
     """Process the selected ROI"""

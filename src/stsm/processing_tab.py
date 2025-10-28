@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 from load_save import load_mosaic, save_proc_image, save_original_binary, save_mosaic_stats_data
 from display import update_proc_display
-from roi import confirm_roi
+from roi import confirm_roi, set_confirm_roi_button_visible
 
 def processing_tab(self):
     # Create a frame for controls
@@ -41,6 +41,8 @@ def processing_tab(self):
         state=tk.DISABLED  # Initially disabled
     )
     self.confirm_roi_button.pack(pady=5)
+    # Ensure it's hidden initially (not just disabled)
+    set_confirm_roi_button_visible(self, False)
     
     # Create a unified layer control frame for processing tab - but don't pack it yet
     self.proc_unified_layer_frame = ttk.LabelFrame(self.processing_frame_controls, text="Layer Controls")

@@ -6,7 +6,7 @@ import tkinter.messagebox as messagebox
 import os
 from layer_controls import show_layer_controls, hide_layer_controls, hide_proc_layer_controls
 from display import update_display, update_proc_display
-from roi import start_roi, update_roi, end_roi_drag, confirm_roi
+from roi import start_roi, update_roi, end_roi_drag, confirm_roi, process_selected_roi, set_confirm_roi_button_visible
 import openpyxl as opxl
 import h5py
 
@@ -66,7 +66,7 @@ def load_image(self):
         update_display(self)
 
 def load_mosaic(self):
-    """Load a mosaic image and display it for ROI selection"""
+    """Load a mosaic image and either select a ROI or process full image."""
     # Verify if pixel calibration is set
     if not self.pixel_cal_input.get():
         messagebox.showwarning("Warning", "Please set the pixel calibration value.")
@@ -94,33 +94,50 @@ def load_mosaic(self):
         messagebox.showerror("Error", "Failed to load image.")
         return
         
-    # Store the original image
+    # Store the original image and prepare ROI image/display
     self.original_image = image.copy()
-    
-    # Enter ROI selection mode
-    self.roi_mode = True
     self.roi_image = image
-    
-    # Display the image for ROI selection
     update_proc_display(self)
-    
-    # Bind mouse events for ROI selection
-    self.proc_canvas.bind("<ButtonPress-1>", lambda event: start_roi(self, event))
-    self.proc_canvas.bind("<B1-Motion>", lambda event: update_roi(self, event))
-    self.proc_canvas.bind("<ButtonRelease-1>", lambda event: end_roi_drag(self, event))
 
-    # Bind keyboard event for confirming ROI (only Enter key)
-    self.root.bind("<Return>", lambda event: confirm_roi(self, event))
+    # Hide Confirm ROI initially
+    set_confirm_roi_button_visible(self, False)
 
-    
-    # Enable the confirm ROI button
-    self.confirm_roi_button.config(state=tk.NORMAL)
+    # Ask if the user wants to select a ROI
+    wants_roi = messagebox.askyesno(
+        "Select ROI",
+        "Do you want to select a ROI (Yes) or process the entire image (No)?"
+    )
 
-    # Enable the Global Pore Stats button
+    if wants_roi:
+        # Enter ROI selection mode
+        self.roi_mode = True
+
+        # Bind mouse events for ROI selection
+        self.proc_canvas.bind("<ButtonPress-1>", lambda event: start_roi(self, event))
+        self.proc_canvas.bind("<B1-Motion>", lambda event: update_roi(self, event))
+        self.proc_canvas.bind("<ButtonRelease-1>", lambda event: end_roi_drag(self, event))
+
+        # Bind keyboard event for confirming ROI (Enter key)
+        self.root.bind("<Return>", lambda event: confirm_roi(self, event))
+
+        # Show Confirm ROI button
+        set_confirm_roi_button_visible(self, True)
+
+        # Optional guidance
+        messagebox.showinfo(
+            "Select ROI",
+            "Click and drag to select a Region Of Interest. Press Enter or click 'Confirm ROI' when done."
+        )
+    else:
+        # Process entire image as ROI
+        self.roi_mode = False
+        set_confirm_roi_button_visible(self, False)
+
+        h, w = self.original_image.shape[:2]
+        process_selected_roi(self, 0, 0, w, h)
+
+    # Enable the Global Pore Stats button (allowed after load)
     self.save_mosaic_stats_data_button.config(state=tk.NORMAL)
-
-    # Show a message to the user
-    messagebox.showinfo("Select ROI", "Click and drag to select a Region Of Interest. Press Enter or click 'Confirm ROI' button when done.")
 
 def save_image(self):
     """Save the combined result as a TIFF file"""
