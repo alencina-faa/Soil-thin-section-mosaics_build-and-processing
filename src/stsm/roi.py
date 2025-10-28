@@ -20,6 +20,10 @@ def set_confirm_roi_button_visible(self, visible: bool):
                 self.confirm_roi_button.grid()
             elif mgr == "pack":
                 self.confirm_roi_button.pack()
+            else:
+                # If the widget was previously pack_forget/grid_remove and now has no manager,
+                # default to pack in our UI since controls use pack geometry.
+                self.confirm_roi_button.pack()
             # For place, assume caller will place with coordinates elsewhere
             self.confirm_roi_button.config(state=tk.NORMAL)
         else:

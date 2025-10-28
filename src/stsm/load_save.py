@@ -94,10 +94,9 @@ def load_mosaic(self):
         messagebox.showerror("Error", "Failed to load image.")
         return
         
-    # Store the original image and prepare ROI image/display
+    # Store the original image and prepare ROI image
     self.original_image = image.copy()
     self.roi_image = image
-    update_proc_display(self)
 
     # Hide Confirm ROI initially
     set_confirm_roi_button_visible(self, False)
@@ -128,6 +127,9 @@ def load_mosaic(self):
             "Select ROI",
             "Click and drag to select a Region Of Interest. Press Enter or click 'Confirm ROI' when done."
         )
+        
+        # Now that ROI mode is enabled, update the display to show the image for ROI selection
+        update_proc_display(self)
     else:
         # Process entire image as ROI
         self.roi_mode = False

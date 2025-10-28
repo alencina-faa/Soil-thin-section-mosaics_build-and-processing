@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 from binary_tab import binary_tab
 from processing_tab import processing_tab
+from visualize_tab import visualize_tab
 
 class stsmApp:
     def __init__(self, root):
@@ -48,6 +49,7 @@ class stsmApp:
         #self.align_frame = ttk.Frame(self.notebook)
         self.binary_frame = ttk.Frame(self.notebook)
         self.processing_frame = ttk.Frame(self.notebook)
+        self.visualize_frame = ttk.Frame(self.notebook)
         
         # Add tabs to notebook
         #self.notebook.add(self.acquire_frame, text="Acquire")
@@ -55,12 +57,16 @@ class stsmApp:
         #self.notebook.add(self.align_frame, text="Align")
         self.notebook.add(self.binary_frame, text="Binary")
         self.notebook.add(self.processing_frame, text="Processing")
+        self.notebook.add(self.visualize_frame, text="Visualize")
         
         # Setup the Binary tab
         binary_tab(self)
 
         # Setup the Processing tab
         processing_tab(self)
+
+        # Setup the Visualize tab
+        visualize_tab(self)
 #Ends the mainwindow definitions
 
 if __name__ == "__main__":
