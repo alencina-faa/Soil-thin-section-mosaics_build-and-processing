@@ -291,7 +291,7 @@ def proc_cont_great_50(self):
             S := 4 * m.pi * cont[4] / cont[5]**2, #Shape = 4 pi area / perimeter^2
             C := float(4 * m.pi * (cv2.contourArea(cv2.convexHull(cont[2])) -
                              np.sum([cv2.contourArea(cv2.convexHull(contch)) for contch in cont[3]]))/cont[5]**2), #Convex Shape = 4 pi Convex_area / perimeter^2
-            m.sqrt(S**2 + C**2) , #Pore elongation
+            m.sqrt(S**2 + C**2)/2 , #Pore elongation
             m.atan(S/C)*180/m.pi, #Pore irragularity (deg)
             2 * m.sqrt(cont[4] / m.pi) / self.calibration, #Equivalent diameter = 2 sqrt(area / pi) / self.calibration
             cv2.fitEllipse(cont[2])[1][0], #Ellipse minor diameter
