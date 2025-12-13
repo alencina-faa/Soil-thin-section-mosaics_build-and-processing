@@ -289,8 +289,13 @@ def proc_cont_great_50(self):
             cont[4], #area
             cont[5], #perimeter
             S := 4 * m.pi * cont[4] / cont[5]**2, #Shape = 4 pi area / perimeter^2
-            C := float(4 * m.pi * (cv2.contourArea(cv2.convexHull(cont[2])) -
-                             np.sum([cv2.contourArea(cv2.convexHull(contch)) for contch in cont[3]]))/cont[5]**2), #Convex Shape = 4 pi Convex_area / perimeter^2
+            #C := float(4 * m.pi * (cv2.contourArea(cv2.convexHull(cont[2])) -
+            #                 np.sum([cv2.contourArea(cv2.convexHull(contch)) for contch in cont[3]]))/cont[5]**2), #Convex Shape = 4 pi Convex_area / perimeter^2
+            #(Corrected) Convex Shape = 4 pi area / Convex_perimeter^2 
+            # adapted from Ringrose-Voase 1991, Micromorphology of Soil Structure:
+            #Description, Quantification, Application, Eq. 2
+            C := float(4 * m.pi * (cv2.arcLength(cv2.convexHull(cont[2]), True) + 
+                             np.sum([cv2.arcLength(cv2.convexHull(contch), True) for contch in cont[3]]))/cont[5]**2), 
             m.sqrt(S**2 + C**2)/2 , #Pore elongation
             m.atan(S/C)*180/m.pi, #Pore irragularity (deg)
             2 * m.sqrt(cont[4] / m.pi) / self.calibration, #Equivalent diameter = 2 sqrt(area / pi) / self.calibration
@@ -362,10 +367,14 @@ def proc_cont_great_50(self):
                             cont[4],  # Shape
                             cont[5],  # Convex Shape
                             cont[6],  # Pore elongation
-                            cont[7] if cont[7] <= 13.5 else None,  # Irregulars theta <= 13.5°
-                            cont[7] if 13.5 < cont[7] <= 22.5 else None,  # Slightly irregulars
-                            cont[7] if 22.5 < cont[7] <= 31.5 else None,  # Slightly regulars
-                            cont[7] if 31.5 < cont[7] else "",  # Regulars
+                            #Corrected pore irregularity categories 
+                            # according to Pagliai et al., 1984, EFFECTS OF ZERO AND CONVENTIONAL TILLAGE 
+                            # ON THE LENGTH AND IRREGULARITY OF ELONGATED PORES IN A CLAY LOAM SOIL UNDER VITICULTURE
+                            # Table II
+                            cont[7] if cont[7] <= m.atan(0.3)*180/m.pi else None, #if cont[7] <= 13.5 else None,  # Irregulars theta <= 13.5°
+                            cont[7] if m.atan(0.3)*180/m.pi < cont[7] <= m.atan(0.5)*180/m.pi else None, # if 13.5 < cont[7] <= 22.5 else None,  # Slightly irregulars
+                            cont[7] if m.atan(0.5)*180/m.pi < cont[7] <= m.atan(0.7)*180/m.pi else None, # if 22.5 < cont[7] <= 31.5 else None,  # Slightly regulars
+                            cont[7] if m.atan(0.7)*180/m.pi < cont[7] else None, #if 31.5 < cont[7] else "",  # Regulars
                             size_metric,  # Size metric (Equivalent diameter, Ellipse minor diameter, etc.)
                             None if size["name"] in ["edS", "edM", "edL", "edXL"] else #For circular shaped pores
                             cont[10] if size["name"] in ["emdS", "emdM", "emdL", "emdXL"] else #Ellipse major diameter
