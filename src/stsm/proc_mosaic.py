@@ -296,7 +296,7 @@ def proc_cont_great_50(self):
             #Description, Quantification, Application, Eq. 2
             C := float(4 * m.pi * cont[4] / (cv2.arcLength(cv2.convexHull(cont[2]), True) + 
                              np.sum([cv2.arcLength(cv2.convexHull(contch), True) for contch in cont[3]]))**2), 
-            m.sqrt(S**2 + C**2)/2 , #Pore elongation
+            m.sqrt(S**2 + C**2)/m.sqrt(2), #Pore elongation
             m.atan(S/C)*180/m.pi, #Pore irragularity (deg)
             2 * m.sqrt(cont[4] / m.pi) / self.calibration, #Equivalent diameter = 2 sqrt(area / pi) / self.calibration
             cv2.fitEllipse(cont[2])[1][0], #Ellipse minor diameter
