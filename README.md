@@ -55,6 +55,7 @@ This command runs, in order:
 ### Binary Tab
 
 Purpose:
+
 - Load two input images and create the binary mosaic layer.
 - Toggle layer visibility and reorder overlays.
 - Save the generated binary mosaic.
@@ -66,6 +67,7 @@ Screenshot:
 ### Processing Tab
 
 Purpose:
+
 - Set calibration in pixel per micrometer.
 - Process full image or ROI.
 - Split pores into <= 50 um and > 50 um classes.
@@ -78,6 +80,7 @@ Screenshot:
 ### Visualize Tab
 
 Purpose:
+
 - Load contour dataset from HDF5 and corresponding binary image.
 - Select a pore id and inspect contour geometry.
 - Inspect per-pore stats such as area, perimeter, and edge flag.
@@ -89,18 +92,21 @@ Screenshot:
 ### Acquire Tab (TBD)
 
 Planned:
+
 - Guided image acquisition workflow.
 - Hardware and capture presets.
 
 ### Build Tab (TBD)
 
 Planned:
+
 - Assisted stitching and mosaic assembly.
 - Alignment quality checks before binary generation.
 
 ### Align Tab (TBD)
 
 Planned:
+
 - Advanced registration and correction tools.
 - Multi-image alignment diagnostics.
 
