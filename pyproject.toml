@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stsm"
+version = "0.0.4"
+description = "Tools to build and process soil thin section mosaics"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+authors = [
+  { name = "Alberto Lencina", email = "alencina@azul.faa.unicen.edu.ar" }
+]
+maintainers = [
+  { name = "Alberto Lencina", email = "alencina@azul.faa.unicen.edu.ar" }
+]
+keywords = ["soil", "thin-section", "mosaic", "image-processing"]
+dependencies = [
+  "numpy",
+  "opencv-python",
+  "Pillow",
+  "openpyxl",
+  "h5py",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.11",
+  "black>=24.0",
+]
+
+[project.scripts]
+stsm = "stsm.app:main"
+
+[project.urls]
+Homepage = "https://github.com/alencina-faa/Soil-thin-section-mosaics_build-and-processing"
+Documentation = "https://github.com/alencina-faa/Soil-thin-section-mosaics_build-and-processing"
+Repository = "https://github.com/alencina-faa/Soil-thin-section-mosaics_build-and-processing.git"
+Issues = "https://github.com/alencina-faa/Soil-thin-section-mosaics_build-and-processing/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]

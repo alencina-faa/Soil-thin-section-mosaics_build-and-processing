@@ -1,13 +1,14 @@
+import os
+import threading
 import tkinter as tk
-from tkinter import ttk
 import tkinter.filedialog as fd
 import tkinter.messagebox as messagebox
-from PIL import Image, ImageTk
+from tkinter import ttk
+
 import cv2
-import numpy as np
 import h5py
-import threading
-import os
+import numpy as np
+from PIL import Image, ImageTk
 
 
 def visualize_tab(self):
@@ -16,8 +17,8 @@ def visualize_tab(self):
     self.vis_display_image = None  # color image for drawing overlays
     self.vis_tk_image = None
     self.vis_scale = 1.0  # base scale to fit canvas (updated per render)
-    self.vis_zoom = 1.0   # user zoom multiplier
-    self.vis_pan_x = 0    # pan in screen pixels
+    self.vis_zoom = 1.0  # user zoom multiplier
+    self.vis_pan_x = 0  # pan in screen pixels
     self.vis_pan_y = 0
     self.vis_image_pos = (0, 0)
     self.vis_h5_path = None
@@ -37,9 +38,7 @@ def visualize_tab(self):
 
     # Load HDF5 button
     self.vis_load_h5_btn = ttk.Button(
-        self.visualize_frame_controls,
-        text="Load .h5",
-        command=lambda: _vis_load_h5(self)
+        self.visualize_frame_controls, text="Load .h5", command=lambda: _vis_load_h5(self)
     )
     self.vis_load_h5_btn.pack(pady=4, fill=tk.X)
 
@@ -47,7 +46,7 @@ def visualize_tab(self):
     self.vis_load_img_btn = ttk.Button(
         self.visualize_frame_controls,
         text="Load Binary Image",
-        command=lambda: _vis_load_binary(self)
+        command=lambda: _vis_load_binary(self),
     )
     self.vis_load_img_btn.pack(pady=4, fill=tk.X)
 
@@ -56,19 +55,14 @@ def visualize_tab(self):
     self.vis_pore_id_var = tk.StringVar()
     # Allow typing for large datasets; we'll populate values only up to a threshold
     self.vis_pore_id_combo = ttk.Combobox(
-        self.visualize_frame_controls,
-        textvariable=self.vis_pore_id_var,
-        values=[],
-        state="normal"
+        self.visualize_frame_controls, textvariable=self.vis_pore_id_var, values=[], state="normal"
     )
     self.vis_pore_id_combo.pack(pady=2, fill=tk.X)
     # Trigger show on Enter
     self.vis_pore_id_combo.bind("<Return>", lambda e: _vis_show_contour(self))
 
     self.vis_show_btn = ttk.Button(
-        self.visualize_frame_controls,
-        text="Show Contour",
-        command=lambda: _vis_show_contour(self)
+        self.visualize_frame_controls, text="Show Contour", command=lambda: _vis_show_contour(self)
     )
     self.vis_show_btn.pack(pady=8, fill=tk.X)
 
@@ -82,20 +76,26 @@ def visualize_tab(self):
         to=10,
         textvariable=self.vis_line_thickness_var,
         width=5,
-        command=lambda: _vis_update_display(self)
+        command=lambda: _vis_update_display(self),
     )
     self.vis_line_thickness_spin.pack(side=tk.LEFT)
     self.vis_line_thickness_spin.bind("<Return>", lambda e: _vis_update_display(self))
 
     # Loading indicator
-    self.vis_loading_label = ttk.Label(self.visualize_frame_controls, textvariable=self.vis_loading_var, foreground="gray")
+    self.vis_loading_label = ttk.Label(
+        self.visualize_frame_controls, textvariable=self.vis_loading_var, foreground="gray"
+    )
     self.vis_loading_label.pack(pady=(8, 0), fill=tk.X)
 
     # View controls: Fit and Reset
     vc = ttk.Frame(self.visualize_frame_controls)
     vc.pack(fill=tk.X, pady=(10, 0))
-    ttk.Button(vc, text="Fit", command=lambda: _vis_fit(self)).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 3))
-    ttk.Button(vc, text="Reset", command=lambda: _vis_reset(self)).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(3, 0))
+    ttk.Button(vc, text="Fit", command=lambda: _vis_fit(self)).pack(
+        side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 3)
+    )
+    ttk.Button(vc, text="Reset", command=lambda: _vis_reset(self)).pack(
+        side=tk.LEFT, expand=True, fill=tk.X, padx=(3, 0)
+    )
 
     # Right area: canvas + stats panel
     self.visualize_frame_images = ttk.Frame(self.visualize_frame)
@@ -112,9 +112,7 @@ def visualize_tab(self):
     self.vis_canvas.grid(row=0, column=0, sticky="nsew")
 
     self.vis_no_image_label = ttk.Label(
-        self.vis_canvas,
-        text="No image loaded. Load .h5 and its binary image.",
-        background="white"
+        self.vis_canvas, text="No image loaded. Load .h5 and its binary image.", background="white"
     )
     self.vis_canvas.create_window(400, 300, window=self.vis_no_image_label)
 
@@ -156,7 +154,9 @@ def visualize_tab(self):
 
 
 def _vis_load_h5(self):
-    path = fd.askopenfilename(title="Select HDF5 file", filetypes=[("HDF5 files", "*.h5"), ("All files", "*.*")])
+    path = fd.askopenfilename(
+        title="Select HDF5 file", filetypes=[("HDF5 files", "*.h5"), ("All files", "*.*")]
+    )
     if not path:
         return
 
@@ -166,16 +166,20 @@ def _vis_load_h5(self):
 
     def worker():
         try:
-            with h5py.File(path, 'r') as f:
+            with h5py.File(path, "r") as f:
                 if "contours" not in f:
                     raise RuntimeError("Invalid H5: 'contours' group not found.")
                 ids = list(f["contours"].keys())
         except Exception as e:
-            self.root.after(0, lambda: [
-                messagebox.showerror("Error", f"Failed to load H5: {e}"),
-                self.vis_loading_var.set(""),
-                _vis_set_controls_state(self, tk.NORMAL)
-            ])
+            error_msg = str(e)
+            self.root.after(
+                0,
+                lambda: [
+                    messagebox.showerror("Error", f"Failed to load H5: {error_msg}"),
+                    self.vis_loading_var.set(""),
+                    _vis_set_controls_state(self, tk.NORMAL),
+                ],
+            )
             return
 
         def on_done():
@@ -213,10 +217,10 @@ def _vis_try_autoload_binary(self):
 
 
 def _vis_load_binary(self):
-    path = fd.askopenfilename(title="Select binary image", filetypes=[
-        ("Image files", "*.tiff *.tif *.png *.bmp *.jpg *.jpeg"),
-        ("All files", "*.*")
-    ])
+    path = fd.askopenfilename(
+        title="Select binary image",
+        filetypes=[("Image files", "*.tiff *.tif *.png *.bmp *.jpg *.jpeg"), ("All files", "*.*")],
+    )
     if not path:
         return
     img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
@@ -239,23 +243,23 @@ def _vis_show_contour(self):
         messagebox.showwarning("Warning", "Select a Pore_id.")
         return
     try:
-        with h5py.File(self.vis_h5_path, 'r') as f:
+        with h5py.File(self.vis_h5_path, "r") as f:
             if "contours" not in f or pore_id not in f["contours"]:
                 raise KeyError(f"Pore_id '{pore_id}' not found in H5")
             cg = f["contours"][pore_id]
             # Read stats
-            idx = int(cg.attrs.get('index', int(pore_id)))
-            is_edge = bool(cg.attrs.get('is_edge', False))
-            area = float(cg.attrs.get('area', 0.0))
-            perimeter = float(cg.attrs.get('perimeter', 0.0))
-            num_children = int(cg.attrs.get('num_children', 0))
+            idx = int(cg.attrs.get("index", int(pore_id)))
+            is_edge = bool(cg.attrs.get("is_edge", False))
+            area = float(cg.attrs.get("area", 0.0))
+            perimeter = float(cg.attrs.get("perimeter", 0.0))
+            num_children = int(cg.attrs.get("num_children", 0))
 
             # Read parent contour points
-            parent = np.array(cg['parent'][:]) if 'parent' in cg else None
+            parent = np.array(cg["parent"][:]) if "parent" in cg else None
             # Read children
             children = []
-            if 'children' in cg:
-                chg = cg['children']
+            if "children" in cg:
+                chg = cg["children"]
                 for key in chg.keys():
                     children.append(np.array(chg[key][:]))
 
@@ -279,11 +283,11 @@ def _vis_show_contour(self):
         self.vis_display_image = None
 
         # Update stats panel
-        self._vis_stat_vars['index'].set(str(idx))
-        self._vis_stat_vars['is_edge'].set("Yes" if is_edge else "No")
-        self._vis_stat_vars['area'].set(f"{area:.2f}")
-        self._vis_stat_vars['perimeter'].set(f"{perimeter:.2f}")
-        self._vis_stat_vars['num_children'].set(str(num_children))
+        self._vis_stat_vars["index"].set(str(idx))
+        self._vis_stat_vars["is_edge"].set("Yes" if is_edge else "No")
+        self._vis_stat_vars["area"].set(f"{area:.2f}")
+        self._vis_stat_vars["perimeter"].set(f"{perimeter:.2f}")
+        self._vis_stat_vars["num_children"].set(str(num_children))
 
         # Auto-zoom to pore with 20% padding
         bbox = _vis_compute_bbox(p_contour, ch_contours)
@@ -353,6 +357,7 @@ def _vis_update_display(self):
     thickness = int(self.vis_line_thickness_var.get() or 2)
     sx = scale
     sy = scale
+
     # Because we've resized the crop to (dest_w,dest_h) using scale sx/sy, each image point (x,y)
     # maps to ((x - x1_img)*sx, (y - y1_img)*sy) in dest_bgr coords.
     def _transform_contour(cont):
@@ -365,7 +370,15 @@ def _vis_update_display(self):
         return pts
 
     pc = _transform_contour(self._vis_parent_contour)
-    chs = [c for c in ([_transform_contour(c) for c in self._vis_children_contours] if self._vis_children_contours else []) if c is not None]
+    chs = [
+        c
+        for c in (
+            [_transform_contour(c) for c in self._vis_children_contours]
+            if self._vis_children_contours
+            else []
+        )
+        if c is not None
+    ]
 
     if pc is not None and len(pc) >= 2:
         cv2.drawContours(dest_bgr, [pc], -1, (255, 0, 0), thickness)
@@ -386,9 +399,11 @@ def _vis_schedule_render(self, delay_ms=50):
         # Already scheduled; no need to schedule another
         return
     self._vis_render_scheduled = True
+
     def _do():
         self._vis_render_scheduled = False
         _vis_update_display(self)
+
     # Cancel previous after if any
     try:
         if self._vis_render_after_id is not None:
@@ -453,15 +468,15 @@ def _vis_focus_bbox(self, bbox, padding=0.2):
     screen_cx = x_pos + cx * scale
     screen_cy = y_pos + cy * scale
     # Set pan so that center goes to canvas center (reset, not incremental)
-    self.vis_pan_x = (cw / 2 - screen_cx)
-    self.vis_pan_y = (ch / 2 - screen_cy)
+    self.vis_pan_x = cw / 2 - screen_cx
+    self.vis_pan_y = ch / 2 - screen_cy
 
 
 def _vis_on_wheel(self, event):
     if self.vis_binary_image is None:
         return
     # Zoom towards mouse position
-    delta = 1.1 if event.delta > 0 else 1/1.1
+    delta = 1.1 if event.delta > 0 else 1 / 1.1
     old_zoom = self.vis_zoom
     new_zoom = min(20.0, max(0.1, self.vis_zoom * delta))
     if abs(new_zoom - old_zoom) < 1e-6:
@@ -491,8 +506,8 @@ def _vis_on_wheel(self, event):
     y_pos_new = (ch - h * new_scale) / 2 + self.vis_pan_y
     screen_x_new = x_pos_new + img_x * new_scale
     screen_y_new = y_pos_new + img_y * new_scale
-    self.vis_pan_x += (event.x - screen_x_new)
-    self.vis_pan_y += (event.y - screen_y_new)
+    self.vis_pan_x += event.x - screen_x_new
+    self.vis_pan_y += event.y - screen_y_new
 
     self.vis_zoom = new_zoom
     _vis_schedule_render(self)
@@ -505,7 +520,7 @@ def _vis_pan_start(self, event):
 
 
 def _vis_pan_move(self, event):
-    if not getattr(self, '_vis_dragging', False):
+    if not getattr(self, "_vis_dragging", False):
         return
     dx = event.x - self._vis_last_x
     dy = event.y - self._vis_last_y
@@ -534,7 +549,12 @@ def _vis_reset(self):
 
 
 def _vis_set_controls_state(self, state):
-    for w in [self.vis_load_h5_btn, self.vis_load_img_btn, self.vis_pore_id_combo, self.vis_show_btn]:
+    for w in [
+        self.vis_load_h5_btn,
+        self.vis_load_img_btn,
+        self.vis_pore_id_combo,
+        self.vis_show_btn,
+    ]:
         try:
             w.config(state=state)
         except Exception:
