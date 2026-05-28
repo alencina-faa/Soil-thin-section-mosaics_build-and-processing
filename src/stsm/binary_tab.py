@@ -1,9 +1,14 @@
 import tkinter as tk
 from tkinter import ttk
 
-from display import update_display
-from layer_controls import move_layer_down_by_index, move_layer_up_by_index
-from load_save import load_image, save_image
+try:
+    from .display import update_display
+    from .layer_controls import move_layer_down_by_index, move_layer_up_by_index
+    from .load_save import load_image, save_image
+except ImportError:
+    from display import update_display
+    from layer_controls import move_layer_down_by_index, move_layer_up_by_index
+    from load_save import load_image, save_image
 
 
 def binary_tab(self):
