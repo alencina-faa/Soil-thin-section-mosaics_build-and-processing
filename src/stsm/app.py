@@ -8,6 +8,8 @@ try:
     from .processing_tab import processing_tab
     from .visualize_tab import visualize_tab
 except ImportError:
+    if __package__:
+        raise
     from binary_tab import binary_tab
     from processing_tab import processing_tab
     from visualize_tab import visualize_tab
