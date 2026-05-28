@@ -1,6 +1,9 @@
 import tkinter as tk
 
-from display import update_display, update_proc_display
+try:
+    from .display import update_display, update_proc_display
+except ImportError:
+    from display import update_display, update_proc_display
 
 
 def show_layer_controls(self):
