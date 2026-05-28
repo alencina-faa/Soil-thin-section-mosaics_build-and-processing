@@ -360,8 +360,8 @@ def save_enhanced_contours_hdf5(self, file_path, mosaic_name):
                 contour_group.attrs["is_edge"] = is_edge
                 contour_group.attrs["area"] = area_um2
                 contour_group.attrs["perimeter"] = perimeter_um
-                contour_group.attrs["area_unit"] = "um^2"
-                contour_group.attrs["perimeter_unit"] = "um"
+                contour_group.attrs["area_unit"] = "μm^2"
+                contour_group.attrs["perimeter_unit"] = "μm"
                 contour_group.attrs["area_px2"] = area
                 contour_group.attrs["perimeter_px"] = perimeter
 

@@ -287,10 +287,10 @@ def _vis_show_contour(self):
             if "area_unit" in cg.attrs and "perimeter_unit" in cg.attrs:
                 area = float(cg.attrs.get("area", 0.0))
                 perimeter = float(cg.attrs.get("perimeter", 0.0))
-                area_unit = str(cg.attrs.get("area_unit", "um^2"))
-                perimeter_unit = str(cg.attrs.get("perimeter_unit", "um"))
+                area_unit = str(cg.attrs.get("area_unit", "μm^2"))
+                perimeter_unit = str(cg.attrs.get("perimeter_unit", "μm"))
                 units_message = (
-                    f"Units: microns (calibration {calibration_px_per_um:.4f} px/um)"
+                    f"Units: microns (calibration {calibration_px_per_um:.4f} px/μm)"
                     if calibration_px_per_um
                     else "Units: microns"
                 )
@@ -306,10 +306,10 @@ def _vis_show_contour(self):
                 if calibration_px_per_um and calibration_px_per_um > 0:
                     area = area / (calibration_px_per_um**2)
                     perimeter = perimeter / calibration_px_per_um
-                    area_unit = "um^2"
-                    perimeter_unit = "um"
+                    area_unit = "μm^2"
+                    perimeter_unit = "μm"
                     units_message = (
-                        f"Units: microns (converted using {calibration_px_per_um:.4f} px/um)"
+                        f"Units: microns (converted using {calibration_px_per_um:.4f} px/μm)"
                     )
 
             num_children = int(cg.attrs.get("num_children", 0))
