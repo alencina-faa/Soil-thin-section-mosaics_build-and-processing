@@ -8,16 +8,28 @@ import cv2
 import h5py
 import openpyxl as opxl
 
-from display import update_display, update_proc_display
-from layer_controls import hide_layer_controls, hide_proc_layer_controls, show_layer_controls
-from roi import (
-    confirm_roi,
-    end_roi_drag,
-    process_selected_roi,
-    set_confirm_roi_button_visible,
-    start_roi,
-    update_roi,
-)
+try:
+    from .display import update_display, update_proc_display
+    from .layer_controls import hide_layer_controls, hide_proc_layer_controls, show_layer_controls
+    from .roi import (
+        confirm_roi,
+        end_roi_drag,
+        process_selected_roi,
+        set_confirm_roi_button_visible,
+        start_roi,
+        update_roi,
+    )
+except ImportError:
+    from display import update_display, update_proc_display
+    from layer_controls import hide_layer_controls, hide_proc_layer_controls, show_layer_controls
+    from roi import (
+        confirm_roi,
+        end_roi_drag,
+        process_selected_roi,
+        set_confirm_roi_button_visible,
+        start_roi,
+        update_roi,
+    )
 
 
 def load_image(self):
