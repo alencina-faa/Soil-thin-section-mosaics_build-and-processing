@@ -3,9 +3,14 @@ from tkinter import messagebox, ttk
 
 import cv2
 
-from binary_tab import binary_tab
-from processing_tab import processing_tab
-from visualize_tab import visualize_tab
+try:
+    from .binary_tab import binary_tab
+    from .processing_tab import processing_tab
+    from .visualize_tab import visualize_tab
+except ImportError:
+    from binary_tab import binary_tab
+    from processing_tab import processing_tab
+    from visualize_tab import visualize_tab
 
 
 class stsmApp:
@@ -29,7 +34,7 @@ class stsmApp:
         self.proc_layer_visibility = [tk.BooleanVar(value=True) for _ in range(3)]
         self.proc_layer_order = [0, 1, 2]  # Default order: Original, pores <= 50, pores > 50
         self.proc_controls_visible = False
-        self.proc_layer_names = ["Original", "Pore \u2264 50μm", "Pore > 50μm"]
+        self.proc_layer_names = ["Original", "Pore ≤ 50μm", "Pore > 50μm"]
         self.original_image = None  # Store the original image before ROI selection
 
         # ROI selection variables
