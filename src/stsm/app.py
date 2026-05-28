@@ -3,9 +3,9 @@ from tkinter import messagebox, ttk
 
 import cv2
 
-from .binary_tab import binary_tab
-from .processing_tab import processing_tab
-from .visualize_tab import visualize_tab
+from binary_tab import binary_tab
+from processing_tab import processing_tab
+from visualize_tab import visualize_tab
 
 
 class stsmApp:
