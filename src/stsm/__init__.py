@@ -1,5 +1,5 @@
 """stsm package."""
 
-from app import main
+from .app import main
 
 __all__ = ["main"]
