@@ -140,11 +140,16 @@ def visualize_tab(self):
         "num_children": tk.StringVar(value="-"),
     }
 
+    self.vis_units_var = tk.StringVar(value="Units: -")
+    ttk.Label(self.visualize_frame_controls, textvariable=self.vis_units_var, foreground="gray").pack(
+        pady=(10, 0), fill=tk.X
+    )
+
     for key, label in [
         ("index", "Pore_id"),
         ("is_edge", "Is Edge"),
-        ("area", "Area (px^2)"),
-        ("perimeter", "Perimeter (px)"),
+        ("area", "Area"),
+        ("perimeter", "Perimeter"),
         ("num_children", "# Children"),
     ]:
         row = ttk.Frame(self.vis_stats)
@@ -183,19 +188,39 @@ def _vis_load_h5(self):
             return
 
         def on_done():
-            self.vis_h5_path = path
-            # If huge, avoid populating combobox values to keep UI responsive
-            self.vis_pore_ids = sorted(ids, key=lambda s: int(s) if str(s).isdigit() else s)
-            if len(self.vis_pore_ids) <= 500:
+            try:
+                self.vis_h5_path = path
+
+                # Reset current selection/display state for a newly loaded dataset.
+                self._vis_parent_contour = None
+                self._vis_children_contours = []
+                self.vis_display_image = None
+                for k in self._vis_stat_vars:
+                    self._vis_stat_vars[k].set("-")
+                self.vis_units_var.set("Units: -")
+
+                # Robust sort for mixed IDs (numeric and non-numeric).
+                # Keeps numeric IDs in numeric order and then non-numeric IDs.
+                def _id_sort_key(value):
+                    s = str(value)
+                    return (0, int(s)) if s.isdigit() else (1, s)
+
+                self.vis_pore_ids = sorted((str(v) for v in ids), key=_id_sort_key)
+
+                # Keep dropdown selection available while still allowing manual typing.
                 self.vis_pore_id_combo["values"] = self.vis_pore_ids
                 if self.vis_pore_ids:
                     self.vis_pore_id_combo.current(0)
-            else:
-                self.vis_pore_id_combo["values"] = []  # act as free-entry
-                self.vis_pore_id_combo.set("")
-            _vis_try_autoload_binary(self)
-            self.vis_loading_var.set("")
-            _vis_set_controls_state(self, tk.NORMAL)
+                else:
+                    self.vis_pore_id_combo.set("")
+
+                _vis_try_autoload_binary(self)
+                self.vis_loading_var.set("")
+                _vis_set_controls_state(self, tk.NORMAL)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to finalize H5 load: {e}")
+                self.vis_loading_var.set("")
+                _vis_set_controls_state(self, tk.NORMAL)
 
         self.root.after(0, on_done)
 
@@ -247,11 +272,46 @@ def _vis_show_contour(self):
             if "contours" not in f or pore_id not in f["contours"]:
                 raise KeyError(f"Pore_id '{pore_id}' not found in H5")
             cg = f["contours"][pore_id]
+
+            file_cal = f.attrs.get("pixel_calibration_px_per_um", None)
+            calibration_px_per_um = None
+            if file_cal is not None:
+                try:
+                    calibration_px_per_um = float(file_cal)
+                except (TypeError, ValueError):
+                    calibration_px_per_um = None
+
             # Read stats
             idx = int(cg.attrs.get("index", int(pore_id)))
             is_edge = bool(cg.attrs.get("is_edge", False))
-            area = float(cg.attrs.get("area", 0.0))
-            perimeter = float(cg.attrs.get("perimeter", 0.0))
+            if "area_unit" in cg.attrs and "perimeter_unit" in cg.attrs:
+                area = float(cg.attrs.get("area", 0.0))
+                perimeter = float(cg.attrs.get("perimeter", 0.0))
+                area_unit = str(cg.attrs.get("area_unit", "μm^2"))
+                perimeter_unit = str(cg.attrs.get("perimeter_unit", "μm"))
+                units_message = (
+                    f"Units: microns (calibration {calibration_px_per_um:.4f} px/μm)"
+                    if calibration_px_per_um
+                    else "Units: microns"
+                )
+            else:
+                # Backward compatibility for old files that only store pixel metrics.
+                area = float(cg.attrs.get("area", 0.0))
+                perimeter = float(cg.attrs.get("perimeter", 0.0))
+                area_unit = "px^2"
+                perimeter_unit = "px"
+                units_message = "Units: pixels"
+
+                # If a calibration attribute exists in an older file, convert on the fly.
+                if calibration_px_per_um and calibration_px_per_um > 0:
+                    area = area / (calibration_px_per_um**2)
+                    perimeter = perimeter / calibration_px_per_um
+                    area_unit = "μm^2"
+                    perimeter_unit = "μm"
+                    units_message = (
+                        f"Units: microns (converted using {calibration_px_per_um:.4f} px/μm)"
+                    )
+
             num_children = int(cg.attrs.get("num_children", 0))
 
             # Read parent contour points
@@ -285,9 +345,10 @@ def _vis_show_contour(self):
         # Update stats panel
         self._vis_stat_vars["index"].set(str(idx))
         self._vis_stat_vars["is_edge"].set("Yes" if is_edge else "No")
-        self._vis_stat_vars["area"].set(f"{area:.2f}")
-        self._vis_stat_vars["perimeter"].set(f"{perimeter:.2f}")
+        self._vis_stat_vars["area"].set(f"{area:.2f} {area_unit}")
+        self._vis_stat_vars["perimeter"].set(f"{perimeter:.2f} {perimeter_unit}")
         self._vis_stat_vars["num_children"].set(str(num_children))
+        self.vis_units_var.set(units_message)
 
         # Auto-zoom to pore with 20% padding
         bbox = _vis_compute_bbox(p_contour, ch_contours)

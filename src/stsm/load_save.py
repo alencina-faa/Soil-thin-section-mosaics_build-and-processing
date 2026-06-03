@@ -8,16 +8,28 @@ import cv2
 import h5py
 import openpyxl as opxl
 
-from display import update_display, update_proc_display
-from layer_controls import hide_layer_controls, hide_proc_layer_controls, show_layer_controls
-from roi import (
-    confirm_roi,
-    end_roi_drag,
-    process_selected_roi,
-    set_confirm_roi_button_visible,
-    start_roi,
-    update_roi,
-)
+try:
+    from .display import update_display, update_proc_display
+    from .layer_controls import hide_layer_controls, hide_proc_layer_controls, show_layer_controls
+    from .roi import (
+        confirm_roi,
+        end_roi_drag,
+        process_selected_roi,
+        set_confirm_roi_button_visible,
+        start_roi,
+        update_roi,
+    )
+except ImportError:
+    from display import update_display, update_proc_display
+    from layer_controls import hide_layer_controls, hide_proc_layer_controls, show_layer_controls
+    from roi import (
+        confirm_roi,
+        end_roi_drag,
+        process_selected_roi,
+        set_confirm_roi_button_visible,
+        start_roi,
+        update_roi,
+    )
 
 
 def load_image(self):
@@ -308,6 +320,19 @@ def save_enhanced_contours_hdf5(self, file_path, mosaic_name):
 
     contour_data = self.processed_contours
 
+    # Calibration is stored as pixel/um (px per micrometer).
+    # Convert linear measures with /calibration and area with /calibration^2.
+    try:
+        calibration_px_per_um = float(getattr(self, "calibration", self.pixel_cal_input.get()))
+        if calibration_px_per_um <= 0:
+            raise ValueError("Calibration must be > 0")
+    except Exception:
+        messagebox.showerror(
+            "Error",
+            "Invalid pixel calibration. Please set a valid value in 'Pixel calibration (pixel/μm)'.",
+        )
+        return
+
     try:
         with h5py.File(filename, "w") as f:
             # Create a group for all contours
@@ -315,6 +340,8 @@ def save_enhanced_contours_hdf5(self, file_path, mosaic_name):
 
             # Store metadata about the dataset
             f.attrs["num_contours"] = len(contour_data)
+            f.attrs["pixel_calibration_px_per_um"] = calibration_px_per_um
+            f.attrs["metric_units"] = "um"
 
             # Create groups for edge and interior contours for easy filtering
             edge_group = f.create_group("edge_contours")
@@ -325,11 +352,18 @@ def save_enhanced_contours_hdf5(self, file_path, mosaic_name):
                 # Use the index as the group name for direct access
                 contour_group = contours_group.create_group(f"{idx}")
 
+                area_um2 = area / (calibration_px_per_um**2)
+                perimeter_um = perimeter / calibration_px_per_um
+
                 # Store the index and edge flag as attributes
                 contour_group.attrs["index"] = idx
                 contour_group.attrs["is_edge"] = is_edge
-                contour_group.attrs["area"] = area
-                contour_group.attrs["perimeter"] = perimeter
+                contour_group.attrs["area"] = area_um2
+                contour_group.attrs["perimeter"] = perimeter_um
+                contour_group.attrs["area_unit"] = "μm^2"
+                contour_group.attrs["perimeter_unit"] = "μm"
+                contour_group.attrs["area_px2"] = area
+                contour_group.attrs["perimeter_px"] = perimeter
 
                 # Save parent contour
                 contour_group.create_dataset("parent", data=parent)

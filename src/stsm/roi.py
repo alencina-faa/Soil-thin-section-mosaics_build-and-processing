@@ -3,9 +3,14 @@ import tkinter as tk
 import cv2
 import numpy as np
 
-from display import update_proc_display
-from layer_controls import show_proc_layer_controls
-from proc_mosaic import process_mosaic
+try:
+    from .display import update_proc_display
+    from .layer_controls import show_proc_layer_controls
+    from .proc_mosaic import process_mosaic
+except ImportError:
+    from display import update_proc_display
+    from layer_controls import show_proc_layer_controls
+    from proc_mosaic import process_mosaic
 
 
 def set_confirm_roi_button_visible(self, visible: bool):

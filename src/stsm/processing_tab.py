@@ -1,10 +1,16 @@
 import tkinter as tk
 from tkinter import ttk
 
-from display import update_proc_display
-from layer_controls import move_proc_layer_down_by_index, move_proc_layer_up_by_index
-from load_save import load_mosaic, save_mosaic_stats_data, save_proc_image
-from roi import confirm_roi, set_confirm_roi_button_visible
+try:
+    from .display import update_proc_display
+    from .layer_controls import move_proc_layer_down_by_index, move_proc_layer_up_by_index
+    from .load_save import load_mosaic, save_mosaic_stats_data, save_proc_image
+    from .roi import confirm_roi, set_confirm_roi_button_visible
+except ImportError:
+    from display import update_proc_display
+    from layer_controls import move_proc_layer_down_by_index, move_proc_layer_up_by_index
+    from load_save import load_mosaic, save_mosaic_stats_data, save_proc_image
+    from roi import confirm_roi, set_confirm_roi_button_visible
 
 
 def processing_tab(self):
@@ -15,7 +21,7 @@ def processing_tab(self):
     # Add label and input for Image pixel calibration
     self.pixel_cal_label = ttk.Label(
         self.processing_frame_controls,
-        text="Pixel calibration (pixel/\u03bcm):",
+        text="Pixel calibration (pixel/μm):",
     )
     self.pixel_cal_label.pack(pady=(0, 5))
 
@@ -101,7 +107,7 @@ def processing_tab(self):
     # Add save buttons for each processed image
     self.save_small_contours_button = ttk.Button(
         self.proc_save_frame,
-        text="Save Image of Pores \u2264 50μm",
+        text="Save Image of Pores ≤ 50μm",
         command=lambda: save_proc_image(self, 0),
     )
     self.save_small_contours_button.pack(pady=2)

@@ -1,5 +1,8 @@
 """stsm package."""
 
-from .app import main
+from .proc_mosaic import detect_edge_contours_optimized, enhanced_process_mosaic_optimized
 
-__all__ = ["main"]
+__all__ = [
+    "detect_edge_contours_optimized",
+    "enhanced_process_mosaic_optimized",
+]
