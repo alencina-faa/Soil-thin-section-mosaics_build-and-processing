@@ -1,6 +1,6 @@
 import tkinter as tk
 
-from .display import update_display, update_proc_display
+from display import update_display, update_proc_display
 
 
 def show_layer_controls(self):

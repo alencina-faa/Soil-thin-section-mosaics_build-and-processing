@@ -8,9 +8,9 @@ import cv2
 import h5py
 import openpyxl as opxl
 
-from .display import update_display, update_proc_display
-from .layer_controls import hide_layer_controls, hide_proc_layer_controls, show_layer_controls
-from .roi import (
+from display import update_display, update_proc_display
+from layer_controls import hide_layer_controls, hide_proc_layer_controls, show_layer_controls
+from roi import (
     confirm_roi,
     end_roi_drag,
     process_selected_roi,
