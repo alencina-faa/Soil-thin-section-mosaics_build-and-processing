@@ -321,7 +321,7 @@ def save_enhanced_contours_hdf5(self, file_path, mosaic_name):
     contour_data = self.processed_contours
 
     # Calibration is stored as pixel/um (px per micrometer).
-    # Convert linear measures with /calibration and area with /calibration^2.
+    # Metrics in self.processed_contours are already stored in microns.
     try:
         calibration_px_per_um = float(getattr(self, "calibration", self.pixel_cal_input.get()))
         if calibration_px_per_um <= 0:
@@ -352,18 +352,13 @@ def save_enhanced_contours_hdf5(self, file_path, mosaic_name):
                 # Use the index as the group name for direct access
                 contour_group = contours_group.create_group(f"{idx}")
 
-                area_um2 = area / (calibration_px_per_um**2)
-                perimeter_um = perimeter / calibration_px_per_um
-
                 # Store the index and edge flag as attributes
                 contour_group.attrs["index"] = idx
                 contour_group.attrs["is_edge"] = is_edge
-                contour_group.attrs["area"] = area_um2
-                contour_group.attrs["perimeter"] = perimeter_um
+                contour_group.attrs["area"] = area
+                contour_group.attrs["perimeter"] = perimeter
                 contour_group.attrs["area_unit"] = "μm^2"
                 contour_group.attrs["perimeter_unit"] = "μm"
-                contour_group.attrs["area_px2"] = area
-                contour_group.attrs["perimeter_px"] = perimeter
 
                 # Save parent contour
                 contour_group.create_dataset("parent", data=parent)
@@ -433,8 +428,8 @@ def save_segmented_pore_data(self, file_path, mosaic_name):
                     headers = [
                         "Pore id",
                         "is_edge",
-                        "Area",
-                        "Perimeter",
+                        "Area (μm^2)",
+                        "Perimeter (μm)",
                         "Shape",
                         "Convex Shape",
                         "Pore elongation",
@@ -443,24 +438,24 @@ def save_segmented_pore_data(self, file_path, mosaic_name):
                         "Slightly regulars",
                         "Regulars",
                         (
-                            "Equivalent diameter"
+                            "Equivalent diameter (μm)"
                             if size["name"] in ["edS", "edM", "edL", "edXL"]
                             else (
-                                "Ellipse minor diameter"
+                                "Ellipse minor diameter (μm)"
                                 if size["name"] in ["emdS", "emdM", "emdL", "emdXL"]
-                                else "Rectangle minor side"
+                                else "Rectangle minor side (μm)"
                             )
                         ),
                         (
                             None
                             if size["name"] in ["edS", "edM", "edL", "edXL"]
                             else (
-                                "Ellipse major diameter"
+                                "Ellipse major diameter (μm)"
                                 if size["name"] in ["emdS", "emdM", "emdL", "emdXL"]
-                                else "Rectangle major side"
+                                else "Rectangle major side (μm)"
                             )
                         ),
-                        "Angle" if shape["name"] == "elongated" else None,  # Ellipse angle
+                        "Angle (deg)" if shape["name"] == "elongated" else None,  # Ellipse angle
                     ]
                     ws.append(headers)
 

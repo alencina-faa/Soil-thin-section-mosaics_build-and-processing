@@ -9,18 +9,20 @@ def process_mosaic(self, image):
     self.image = image
 
     # Call the optimized contour processing function
-    processed_contours = enhanced_process_mosaic_optimized(image)
+    processed_contours_px = enhanced_process_mosaic_optimized(image)
 
-    # Store the processed contours for further analysis
-    self.processed_contours = processed_contours
-
-    # Segmenting contours by diameter less than 50 micron
-    # Converting diameter to pixels using the pixel calibration value
+    # Convert contour metrics to microns once and keep a single unit convention.
     self.calibration = float(self.pixel_cal_input.get())
-    D_pix = 50 * self.calibration
+    cal = self.calibration
+    self.processed_contours = [
+        [idx, is_edge, parent, children, area / (cal**2), perimeter / cal]
+        for idx, is_edge, parent, children, area, perimeter in processed_contours_px
+    ]
 
-    # Calculate the area of the circle with diameter D_pix
-    self.area_50 = round(np.pi * (D_pix / 2) ** 2)
+    # Segmenting contours by equivalent-diameter cutoff of 50 micron.
+    # Keep this threshold in microns^2 to match self.processed_contours metrics.
+    D_um = 50.0
+    self.area_50 = np.pi * (D_um / 2) ** 2
 
     # Create copies of the original image for drawing contours
     all_contours_image = image.copy()
@@ -38,7 +40,7 @@ def process_mosaic(self, image):
     all_contours = []
 
     # Collect all contours (parents and children)
-    for idx, is_edge, parent, children, area, perimeter in processed_contours:
+    for idx, is_edge, parent, children, area, perimeter in self.processed_contours:
         all_contours.append(parent)
         all_contours.extend(children)
 
@@ -237,8 +239,8 @@ def enhanced_process_mosaic_optimized(image):
 
 def proc_cont_all(self):
     # TOTALS
-    # Calculate the area of the image in pixels
-    image_area = np.shape(self.image)[0] * np.shape(self.image)[1]
+    # Calculate the area of the image in microns^2.
+    image_area = (np.shape(self.image)[0] * np.shape(self.image)[1]) / (self.calibration**2)
 
     # Calculate the number of parent contours (with or whitout children)
     num_parent_contours = len(self.processed_contours)
@@ -282,17 +284,21 @@ def proc_cont_all(self):
     )
     # ------------------------------------------------
 
+    porosity = cont_total_area / image_area if image_area > 0 else 0.0
+    pct_less_50 = cont_total_area_less_50 / cont_total_area if cont_total_area > 0 else 0.0
+    pct_great_50 = cont_total_area_great_50 / cont_total_area if cont_total_area > 0 else 0.0
+
     # Summary of the results to be appended as a new row to a Excel file (using openpyxl)
     self.summary = (
         num_parent_contours,  # Number of parent contours
         num_child_contours,  # Number of child contours
-        cont_total_area / image_area,  # Porosity
+        porosity,  # Porosity
         num_parent_contours_less_50,  # Number of parent contours less than 50 micron
         num_child_contours_less_50,  # Number of child contours less than 50 micron
-        cont_total_area_less_50 / cont_total_area,  # Percentage of pores less than 50 micron
+        pct_less_50,  # Percentage of pores less than 50 micron
         num_parent_contours_great_50,  # Number of parent contours greather than 50 micron
         num_child_contours_great_50,  # Number of child contours greather than 50 micorn
-        cont_total_area_great_50 / cont_total_area,  # Percentage of pores less than 50 micron
+        pct_great_50,  # Percentage of pores less than 50 micron
     )
 
 
@@ -302,8 +308,8 @@ def proc_cont_great_50(self):
         [
             cont[0],  # id
             cont[1],  # is_edge
-            cont[4],  # area
-            cont[5],  # perimeter
+            cont[4],  # area (μm^2)
+            cont[5],  # perimeter (μm)
             S := 4 * m.pi * cont[4] / cont[5] ** 2,  # Shape = 4 pi area / perimeter^2
             # C := float(4 * m.pi * (cv2.contourArea(cv2.convexHull(cont[2])) -
             #                 np.sum([cv2.contourArea(cv2.convexHull(contch)) for contch in cont[3]]))/cont[5]**2), #Convex Shape = 4 pi Convex_area / perimeter^2
@@ -315,25 +321,32 @@ def proc_cont_great_50(self):
                 * m.pi
                 * cont[4]
                 / (
-                    cv2.arcLength(cv2.convexHull(cont[2]), True)
-                    + np.sum([cv2.arcLength(cv2.convexHull(contch), True) for contch in cont[3]])
+                    (cv2.arcLength(cv2.convexHull(cont[2]), True) / self.calibration)
+                    + np.sum(
+                        [
+                            cv2.arcLength(cv2.convexHull(contch), True) / self.calibration
+                            for contch in cont[3]
+                        ]
+                    )
                 )
                 ** 2
             ),
             m.sqrt(S**2 + C**2) / m.sqrt(2),  # Pore elongation
             m.atan(S / C) * 180 / m.pi,  # Pore irragularity (deg)
-            2
-            * m.sqrt(cont[4] / m.pi)
-            / self.calibration,  # Equivalent diameter = 2 sqrt(area / pi) / self.calibration
-            cv2.fitEllipse(cont[2])[1][0],  # Ellipse minor diameter
-            cv2.fitEllipse(cont[2])[1][1],  # Ellipse major diameter
+            2 * m.sqrt(cont[4] / m.pi),  # Equivalent diameter (μm)
+            cv2.fitEllipse(cont[2])[1][0] / self.calibration,  # Ellipse minor diameter (μm)
+            cv2.fitEllipse(cont[2])[1][1] / self.calibration,  # Ellipse major diameter (μm)
             cv2.fitEllipse(cont[2])[2],  # Ellipse angle
             (
-                (cont[5] - m.sqrt(cont[5] ** 2 - 16 * cont[4])) / 4 if S < m.pi / 4 else None
-            ),  # Rectangle minor side
+                (cont[5] - m.sqrt(cont[5] ** 2 - 16 * cont[4])) / 4
+                if S < m.pi / 4
+                else None
+            ),  # Rectangle minor side (μm)
             (
-                (cont[5] + m.sqrt(cont[5] ** 2 - 16 * cont[4])) / 4 if S < m.pi / 4 else None
-            ),  # Rectangle major side
+                (cont[5] + m.sqrt(cont[5] ** 2 - 16 * cont[4])) / 4
+                if S < m.pi / 4
+                else None
+            ),  # Rectangle major side (μm)
         ]
         for cont in self.processed_contours
         if cont[4] > self.area_50
