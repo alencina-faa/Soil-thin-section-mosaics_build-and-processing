@@ -8,9 +8,9 @@ try:
     from .processing_tab import processing_tab
     from .visualize_tab import visualize_tab
 except ImportError:
-    from binary_tab import binary_tab
-    from processing_tab import processing_tab
-    from visualize_tab import visualize_tab
+    from binary_tab import binary_tab  # type: ignore[reportMissingImports]
+    from processing_tab import processing_tab  # type: ignore[reportMissingImports]
+    from visualize_tab import visualize_tab  # type: ignore[reportMissingImports]
 
 
 class stsmApp:

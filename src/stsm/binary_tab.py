@@ -6,9 +6,9 @@ try:
     from .layer_controls import move_layer_down_by_index, move_layer_up_by_index
     from .load_save import load_image, save_image
 except ImportError:
-    from display import update_display
-    from layer_controls import move_layer_down_by_index, move_layer_up_by_index
-    from load_save import load_image, save_image
+    from display import update_display  # type: ignore[reportMissingImports]
+    from layer_controls import move_layer_down_by_index, move_layer_up_by_index  # type: ignore[reportMissingImports]
+    from load_save import load_image, save_image  # type: ignore[reportMissingImports]
 
 
 def binary_tab(self):

@@ -3,7 +3,7 @@ import tkinter as tk
 try:
     from .display import update_display, update_proc_display
 except ImportError:
-    from display import update_display, update_proc_display
+    from display import update_display, update_proc_display  # type: ignore[reportMissingImports]
 
 
 def show_layer_controls(self):

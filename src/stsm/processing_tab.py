@@ -7,10 +7,10 @@ try:
     from .load_save import load_mosaic, save_mosaic_stats_data, save_proc_image
     from .roi import confirm_roi, set_confirm_roi_button_visible
 except ImportError:
-    from display import update_proc_display
-    from layer_controls import move_proc_layer_down_by_index, move_proc_layer_up_by_index
-    from load_save import load_mosaic, save_mosaic_stats_data, save_proc_image
-    from roi import confirm_roi, set_confirm_roi_button_visible
+    from display import update_proc_display  # type: ignore[reportMissingImports]
+    from layer_controls import move_proc_layer_down_by_index, move_proc_layer_up_by_index  # type: ignore[reportMissingImports]
+    from load_save import load_mosaic, save_mosaic_stats_data, save_proc_image  # type: ignore[reportMissingImports]
+    from roi import confirm_roi, set_confirm_roi_button_visible  # type: ignore[reportMissingImports]
 
 
 def processing_tab(self):

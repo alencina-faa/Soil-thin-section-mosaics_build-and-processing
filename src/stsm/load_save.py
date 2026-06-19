@@ -1,4 +1,5 @@
 import os
+import math as m
 import tkinter as tk
 import tkinter.filedialog as fd
 import tkinter.messagebox as messagebox
@@ -6,6 +7,7 @@ import tkinter.simpledialog as sd
 
 import cv2
 import h5py
+import numpy as np
 import openpyxl as opxl
 
 try:
@@ -20,9 +22,9 @@ try:
         update_roi,
     )
 except ImportError:
-    from display import update_display, update_proc_display
-    from layer_controls import hide_layer_controls, hide_proc_layer_controls, show_layer_controls
-    from roi import (
+    from display import update_display, update_proc_display  # type: ignore[reportMissingImports]
+    from layer_controls import hide_layer_controls, hide_proc_layer_controls, show_layer_controls  # type: ignore[reportMissingImports]
+    from roi import (  # type: ignore[reportMissingImports]
         confirm_roi,
         end_roi_drag,
         process_selected_roi,
@@ -318,7 +320,47 @@ def save_enhanced_contours_hdf5(self, file_path, mosaic_name):
     # Creates the directory if does not exist
     os.makedirs(os.path.dirname(filename), exist_ok=True)
 
-    contour_data = self.processed_contours
+    area_threshold_um2 = float(getattr(self, "area_50", m.pi * (50.0 / 2.0) ** 2))
+    contour_data = [cont for cont in self.processed_contours if cont[4] > area_threshold_um2]
+    if not contour_data:
+        messagebox.showwarning("Warning", "No processed contours > 50μm available.")
+        return
+
+    # Build per-pore derived metrics computed during processing (proc_mosaic).
+    # Keys are stored as strings to match contour group names in the HDF5 file.
+    pore_metrics_by_id = {
+        str(k): dict(v)
+        for k, v in getattr(self, "processed_cont_metrics_by_id", {}).items()
+        if isinstance(v, dict)
+    }
+    shape_size_index = {}
+    segmented = getattr(self, "processed_cont_great_50_sz", None)
+    if isinstance(segmented, dict):
+        for (shape_name, size_name), rows in segmented.items():
+            key = (str(shape_name), str(size_name))
+            id_set = shape_size_index.setdefault(key, set())
+            for row in rows:
+                if not row:
+                    continue
+
+                pore_id = str(row[0])
+                id_set.add(pore_id)
+
+                # Row layout in processed_cont_great_50_sz:
+                # [id, is_edge, area, perimeter, shape, convex_shape, elongation,
+                #  irregular, slightly_irregular, slightly_regular, regular,
+                #  size_metric, second_metric, angle]
+                existing = pore_metrics_by_id.get(pore_id)
+                if existing is None:
+                    pore_metrics_by_id[pore_id] = {
+                        "shape_name": str(shape_name),
+                        "size_name": str(size_name),
+                        "is_over_50um": True,
+                    }
+                else:
+                    existing["shape_name"] = str(shape_name)
+                    existing["size_name"] = str(size_name)
+                    existing["is_over_50um"] = True
 
     # Calibration is stored as pixel/um (px per micrometer).
     # Metrics in self.processed_contours are already stored in microns.
@@ -342,10 +384,20 @@ def save_enhanced_contours_hdf5(self, file_path, mosaic_name):
             f.attrs["num_contours"] = len(contour_data)
             f.attrs["pixel_calibration_px_per_um"] = calibration_px_per_um
             f.attrs["metric_units"] = "um"
+            f.attrs["derived_metrics_version"] = 1
 
             # Create groups for edge and interior contours for easy filtering
             edge_group = f.create_group("edge_contours")
             interior_group = f.create_group("interior_contours")
+
+            if shape_size_index:
+                segments_group = f.create_group("segments")
+                str_dtype = h5py.string_dtype(encoding="utf-8")
+                for (shape_name, size_name), id_set in shape_size_index.items():
+                    shape_group = segments_group.require_group(shape_name)
+                    size_group = shape_group.create_group(size_name)
+                    ids = np.array(sorted(id_set), dtype=object)
+                    size_group.create_dataset("ids", data=ids, dtype=str_dtype)
 
             # Create a group for each contour with its index as the name for direct access
             for idx, is_edge, parent, children, area, perimeter in contour_data:
@@ -359,6 +411,49 @@ def save_enhanced_contours_hdf5(self, file_path, mosaic_name):
                 contour_group.attrs["perimeter"] = perimeter
                 contour_group.attrs["area_unit"] = "μm^2"
                 contour_group.attrs["perimeter_unit"] = "μm"
+
+                metric = dict(pore_metrics_by_id.get(str(idx), {}))
+                metric["is_over_50um"] = True
+
+                if metric.get("shape_score") is None and perimeter > 0:
+                    metric["shape_score"] = 4.0 * m.pi * area / (perimeter * perimeter)
+
+                if metric.get("shape_name") is None:
+                    score = metric.get("shape_score", 0.0)
+                    if score > 0.8:
+                        metric["shape_name"] = "circ"
+                    elif score > 0.5:
+                        metric["shape_name"] = "MLcirc"
+                    elif score > 0.2:
+                        metric["shape_name"] = "shpless"
+                    else:
+                        metric["shape_name"] = "elongated"
+
+                if metric.get("size_name") is None:
+                    metric["size_name"] = "unclassified"
+
+                if metric.get("equivalent_diameter_um") is None and area > 0:
+                    metric["equivalent_diameter_um"] = 2.0 * m.sqrt(area / m.pi)
+
+                contour_group.attrs["shape_name"] = metric["shape_name"]
+                contour_group.attrs["size_name"] = metric["size_name"]
+                contour_group.attrs["is_over_50um"] = bool(metric["is_over_50um"])
+
+                for attr_name in [
+                    "shape_score",
+                    "convex_shape",
+                    "pore_elongation",
+                    "pore_irregularity_deg",
+                    "equivalent_diameter_um",
+                    "ellipse_minor_diameter_um",
+                    "ellipse_major_diameter_um",
+                    "ellipse_angle_deg",
+                    "rectangle_minor_side_um",
+                    "rectangle_major_side_um",
+                ]:
+                    value = metric.get(attr_name)
+                    if value is not None:
+                        contour_group.attrs[attr_name] = float(value)
 
                 # Save parent contour
                 contour_group.create_dataset("parent", data=parent)
@@ -412,10 +507,8 @@ def save_segmented_pore_data(self, file_path, mosaic_name):
                 # Skip invalid shape-size combinations
                 if (
                     (shape["name"] != "elongated" and size["name"] in ["edS", "edM", "edL", "edXL"])
-                    or (
-                        shape["name"] != "circ"
-                        and size["name"] in ["emdS", "emdM", "emdL", "emdXL"]
-                    )
+                    or (#shape["name"] != "circ" and 
+                        size["name"] in ["emdS", "emdM", "emdL", "emdXL"])
                     or (
                         (shape["name"] not in ["circ", "MLcirc"])
                         and size["name"] in ["rmsS", "rmsM", "rmsL", "rmsXL"]
@@ -455,7 +548,7 @@ def save_segmented_pore_data(self, file_path, mosaic_name):
                                 else "Rectangle major side (μm)"
                             )
                         ),
-                        "Angle (deg)" if shape["name"] == "elongated" else None,  # Ellipse angle
+                        "Angle (deg)",
                     ]
                     ws.append(headers)
 

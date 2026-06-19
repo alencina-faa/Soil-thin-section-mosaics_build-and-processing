@@ -301,6 +301,36 @@ def proc_cont_all(self):
         pct_great_50,  # Percentage of pores less than 50 micron
     )
 
+def fit_constrained_area_Ellipse(contour):
+    """
+    Fits an ellipse to a contour with the strict constraint 
+    that the fitted ellipse matches the contour's exact area.
+    """
+    # 1. Ensure contour has enough points to fit an ellipse
+    if len(contour) < 5:
+        raise ValueError("Contour must contain at least 5 points.")
+    
+    # 2. Get the actual target area of the contour
+    contour_area = cv2.contourArea(contour)
+    if contour_area <= 0:
+        raise ValueError("Contour area must be greater than zero.")
+        
+    # 3. Perform standard least-squares ellipse fitting
+    # Returns: ((center_x, center_y), (width, height), angle)
+    (cx, cy), (w_init, h_init), angle = cv2.fitEllipse(contour)
+    
+    # 4. Calculate the area of the initially fitted ellipse
+    initial_ellipse_area = (np.pi / 4.0) * w_init * h_init
+    
+    # 5. Compute the scaling factor to match areas
+    scale_factor = np.sqrt(contour_area / initial_ellipse_area)
+    
+    # 6. Apply the constraint to the axes
+    w_constrained = w_init * scale_factor
+    h_constrained = h_init * scale_factor
+    
+    # Return the modified OpenCV-compliant RotatedRect tuple
+    return ((cx, cy), (w_constrained, h_constrained), angle)
 
 def proc_cont_great_50(self):
     # Segment contours (pores from now on...) with an area greather than the area of a pore with a diameter of 50 micron
@@ -334,9 +364,9 @@ def proc_cont_great_50(self):
             m.sqrt(S**2 + C**2) / m.sqrt(2),  # Pore elongation
             m.atan(S / C) * 180 / m.pi,  # Pore irragularity (deg)
             2 * m.sqrt(cont[4] / m.pi),  # Equivalent diameter (μm)
-            cv2.fitEllipse(cont[2])[1][0] / self.calibration,  # Ellipse minor diameter (μm)
-            cv2.fitEllipse(cont[2])[1][1] / self.calibration,  # Ellipse major diameter (μm)
-            cv2.fitEllipse(cont[2])[2],  # Ellipse angle
+            fit_constrained_area_Ellipse(cont[2])[1][0] / self.calibration,  # Ellipse minor diameter (μm)
+            fit_constrained_area_Ellipse(cont[2])[1][1] / self.calibration,  # Ellipse major diameter (μm)
+            fit_constrained_area_Ellipse(cont[2])[2],  # Ellipse angle
             (
                 (cont[5] - m.sqrt(cont[5] ** 2 - 16 * cont[4])) / 4
                 if S < m.pi / 4
@@ -351,6 +381,35 @@ def proc_cont_great_50(self):
         for cont in self.processed_contours
         if cont[4] > self.area_50
     ]
+
+    # Per-pore derived metrics (>50um), keyed by pore id, to persist in HDF5.
+    self.processed_cont_metrics_by_id = {}
+    for cont in processed_cont_great_50:
+        shape_score = float(cont[4])
+        if shape_score > 0.8:
+            shape_name = "circ"
+        elif shape_score > 0.5:
+            shape_name = "MLcirc"
+        elif shape_score > 0.2:
+            shape_name = "shpless"
+        else:
+            shape_name = "elongated"
+
+        self.processed_cont_metrics_by_id[str(cont[0])] = {
+            "shape_name": shape_name,
+            "size_name": "unclassified",
+            "is_over_50um": True,
+            "shape_score": float(cont[4]),
+            "convex_shape": float(cont[5]),
+            "pore_elongation": float(cont[6]),
+            "pore_irregularity_deg": float(cont[7]),
+            "equivalent_diameter_um": float(cont[8]),
+            "ellipse_minor_diameter_um": float(cont[9]),
+            "ellipse_major_diameter_um": float(cont[10]),
+            "ellipse_angle_deg": float(cont[11]),
+            "rectangle_minor_side_um": float(cont[12]) if cont[12] is not None else None,
+            "rectangle_major_side_um": float(cont[13]) if cont[13] is not None else None,
+        }
 
     # Shapes of interest are defined in a dictionary with min and max values
     self.shapes = [
@@ -397,7 +456,8 @@ def proc_cont_great_50(self):
             # Skip invalid shape-size combinations
             if (
                 (shape["name"] != "elongated" and size["name"] in ["edS", "edM", "edL", "edXL"])
-                or (shape["name"] != "circ" and size["name"] in ["emdS", "emdM", "emdL", "emdXL"])
+                or (#shape["name"] != "circ" and 
+                    size["name"] in ["emdS", "emdM", "emdL", "emdXL"])
                 or (
                     (shape["name"] not in ["circ", "MLcirc"])
                     and size["name"] in ["rmsS", "rmsM", "rmsL", "rmsXL"]
@@ -477,9 +537,14 @@ def proc_cont_great_50(self):
                                         else cont[13]
                                     )
                                 ),  # Rectangle major side
-                                cont[11] if shape["name"] == "elongated" else None,  # Ellipse angle
+                                cont[11],  # Ellipse angle
                             ]
                         )
+
+                        metrics = self.processed_cont_metrics_by_id.get(str(cont[0]))
+                        if metrics is not None:
+                            metrics["shape_name"] = shape["name"]
+                            metrics["size_name"] = size["name"]
 
     # Example: Accessing the processed data
     # print(self.processed_cont_great_50_sz.get(("circ", "edM"), []))

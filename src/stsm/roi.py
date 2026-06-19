@@ -8,9 +8,9 @@ try:
     from .layer_controls import show_proc_layer_controls
     from .proc_mosaic import process_mosaic
 except ImportError:
-    from display import update_proc_display
-    from layer_controls import show_proc_layer_controls
-    from proc_mosaic import process_mosaic
+    from display import update_proc_display  # type: ignore[reportMissingImports]
+    from layer_controls import show_proc_layer_controls  # type: ignore[reportMissingImports]
+    from proc_mosaic import process_mosaic  # type: ignore[reportMissingImports]
 
 
 def set_confirm_roi_button_visible(self, visible: bool):

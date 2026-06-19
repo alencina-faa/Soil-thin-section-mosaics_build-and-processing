@@ -10,6 +10,10 @@ import h5py
 import numpy as np
 from PIL import Image, ImageTk
 
+try:
+    from .proc_mosaic import fit_constrained_area_Ellipse
+except:
+    from proc_mosaic import fit_constrained_area_Ellipse  # type: ignore[reportMissingImports]
 
 def visualize_tab(self):
     # State variables for this tab
@@ -28,6 +32,7 @@ def visualize_tab(self):
     # Contours currently selected (original image coordinates)
     self._vis_parent_contour = None
     self._vis_children_contours = []
+    self._vis_shape_info = None
     # Render throttle state
     self._vis_render_scheduled = False
     self._vis_render_after_id = None
@@ -140,6 +145,13 @@ def visualize_tab(self):
         "num_children": tk.StringVar(value="-"),
     }
 
+    self._vis_shape_vars = {
+        "circle": tk.BooleanVar(value=True),
+        "ellipse": tk.BooleanVar(value=True),
+        "rectangle": tk.BooleanVar(value=True),
+    }
+    self._vis_shape_checkbuttons = {}
+
     self.vis_units_var = tk.StringVar(value="Units: -")
     ttk.Label(self.visualize_frame_controls, textvariable=self.vis_units_var, foreground="gray").pack(
         pady=(10, 0), fill=tk.X
@@ -156,6 +168,20 @@ def visualize_tab(self):
         row.pack(fill=tk.X, padx=8, pady=2)
         ttk.Label(row, text=f"{label}:", width=16).pack(side=tk.LEFT)
         ttk.Label(row, textvariable=self._vis_stat_vars[key]).pack(side=tk.LEFT)
+
+    shapes_frame = ttk.LabelFrame(self.vis_stats, text="Figures")
+    shapes_frame.pack(fill=tk.X, padx=8, pady=(8, 8))
+    for key, label in [("circle", "Circle"), ("ellipse", "Ellipse"), ("rectangle", "Rectangle")]:
+        chk = ttk.Checkbutton(
+            shapes_frame,
+            text=label,
+            variable=self._vis_shape_vars[key],
+            command=lambda: _vis_update_display(self),
+        )
+        chk.pack(anchor="w", padx=6, pady=1)
+        self._vis_shape_checkbuttons[key] = chk
+
+    _vis_update_shape_controls(self, None)
 
 
 def _vis_load_h5(self):
@@ -194,10 +220,12 @@ def _vis_load_h5(self):
                 # Reset current selection/display state for a newly loaded dataset.
                 self._vis_parent_contour = None
                 self._vis_children_contours = []
+                self._vis_shape_info = None
                 self.vis_display_image = None
                 for k in self._vis_stat_vars:
                     self._vis_stat_vars[k].set("-")
                 self.vis_units_var.set("Units: -")
+                _vis_update_shape_controls(self, None)
 
                 # Robust sort for mixed IDs (numeric and non-numeric).
                 # Keeps numeric IDs in numeric order and then non-numeric IDs.
@@ -268,6 +296,7 @@ def _vis_show_contour(self):
         messagebox.showwarning("Warning", "Select a Pore_id.")
         return
     try:
+        persisted_shape_attrs = None
         with h5py.File(self.vis_h5_path, "r") as f:
             if "contours" not in f or pore_id not in f["contours"]:
                 raise KeyError(f"Pore_id '{pore_id}' not found in H5")
@@ -323,6 +352,8 @@ def _vis_show_contour(self):
                 for key in chg.keys():
                     children.append(np.array(chg[key][:]))
 
+            persisted_shape_attrs = dict(cg.attrs.items())
+
         # Ensure correct contour shapes and dtypes
         def _as_contour(arr):
             if arr is None:
@@ -335,10 +366,17 @@ def _vis_show_contour(self):
 
         p_contour = _as_contour(parent)
         ch_contours = [_as_contour(c) for c in children]
+        shape_info = _vis_build_shape_info_from_attrs(
+            persisted_shape_attrs, p_contour, calibration_px_per_um
+        )
+        if shape_info is None:
+            shape_info = _vis_build_shape_info(p_contour)
 
         # Store contours for viewport rendering
         self._vis_parent_contour = p_contour
         self._vis_children_contours = [c for c in ch_contours if c is not None]
+        self._vis_shape_info = shape_info
+        _vis_update_shape_controls(self, shape_info)
         # Discard any precomposed display image to avoid stale state
         self.vis_display_image = None
 
@@ -446,6 +484,10 @@ def _vis_update_display(self):
     for ch in chs:
         if len(ch) >= 2:
             cv2.drawContours(dest_bgr, [ch], -1, (0, 255, 0), thickness)
+
+    shape_info = getattr(self, "_vis_shape_info", None)
+    if shape_info is not None:
+        _vis_draw_shape_overlays(self, dest_bgr, shape_info, x1_img, y1_img, sx, sy, thickness)
 
     # Convert to Tk image and draw at destination position
     pil = Image.fromarray(cv2.cvtColor(dest_bgr, cv2.COLOR_BGR2RGB))
@@ -620,3 +662,251 @@ def _vis_set_controls_state(self, state):
             w.config(state=state)
         except Exception:
             pass
+
+
+def _vis_build_shape_info(contour):
+    if contour is None or len(contour) == 0:
+        return None
+
+    contour = np.asarray(contour)
+    points = contour.reshape(-1, 2).astype(np.float64)
+
+    area = float(cv2.contourArea(contour))
+    perimeter = float(cv2.arcLength(contour, True))
+    circularity = (4.0 * np.pi * area / (perimeter * perimeter)) if perimeter > 0 else 0.0
+    if circularity > 0.8:
+        shape_class = "circ"
+    elif circularity > 0.5:
+        shape_class = "MLcirc"
+    elif circularity > 0.2:
+        shape_class = "shpless"
+    else:
+        shape_class = "elongated"
+
+    moments = cv2.moments(contour)
+    if abs(moments.get("m00", 0.0)) > 1e-12:
+        center = (
+            float(moments["m10"] / moments["m00"]),
+            float(moments["m01"] / moments["m00"]),
+        )
+    else:
+        center = (float(np.mean(points[:, 0])), float(np.mean(points[:, 1])))
+
+    circle_diameter = 2.0 * np.sqrt(area / np.pi) if area > 0 else 0.0
+
+    ellipse = None
+    rectangle = None
+    if len(contour) >= 5:
+        try:
+            fitted_ellipse = fit_constrained_area_Ellipse(contour)
+            ellipse_axes = (float(fitted_ellipse[1][0]), float(fitted_ellipse[1][1]))
+            ellipse_angle = float(fitted_ellipse[2])
+            ellipse = {
+                "center": center,
+                "axes": ellipse_axes,
+                "angle": ellipse_angle,
+            }
+
+            min_rect = cv2.minAreaRect(contour)
+            rect_width = float(max(min_rect[1][0], min_rect[1][1]))
+            rect_height = float(min(min_rect[1][0], min_rect[1][1]))
+            rectangle = {
+                "center": center,
+                "sizes": (rect_width, rect_height),
+                "angle": ellipse_angle,
+            }
+        except cv2.error:
+            ellipse = None
+            rectangle = None
+
+    return {
+        "shape_class": shape_class,
+        "center": center,
+        "circle_diameter": circle_diameter,
+        "ellipse": ellipse,
+        "rectangle": rectangle,
+    }
+
+
+def _vis_build_shape_info_from_attrs(shape_attrs, contour, calibration_px_per_um):
+    if shape_attrs is None or contour is None or len(contour) == 0:
+        return None
+    if calibration_px_per_um is None or calibration_px_per_um <= 0:
+        return None
+
+    if "shape_name" not in shape_attrs:
+        return None
+
+    def _get_attr(name):
+        value = shape_attrs.get(name, None)
+        if isinstance(value, bytes):
+            return value.decode("utf-8", errors="ignore")
+        return value
+
+    shape_name_raw = _get_attr("shape_name")
+    if shape_name_raw is None:
+        return None
+    shape_name = str(shape_name_raw)
+
+    base_info = _vis_build_shape_info(contour)
+    if base_info is None:
+        return None
+
+    center = base_info["center"]
+
+    def _um_to_px(value):
+        if value is None:
+            return None
+        try:
+            return float(value) * float(calibration_px_per_um)
+        except (TypeError, ValueError):
+            return None
+
+    circle_diameter = _um_to_px(_get_attr("equivalent_diameter_um"))
+    if circle_diameter is None:
+        circle_diameter = float(base_info.get("circle_diameter", 0.0))
+
+    ellipse = None
+    emn = _um_to_px(_get_attr("ellipse_minor_diameter_um"))
+    emj = _um_to_px(_get_attr("ellipse_major_diameter_um"))
+    eang = _get_attr("ellipse_angle_deg")
+    if emn is not None and emj is not None and eang is not None and emn > 0 and emj > 0:
+        ellipse = {
+            "center": center,
+            "axes": (float(emn), float(emj)),
+            "angle": float(eang),
+        }
+    else:
+        ellipse = base_info.get("ellipse")
+
+    rectangle = None
+    rmn = _um_to_px(_get_attr("rectangle_minor_side_um"))
+    rmj = _um_to_px(_get_attr("rectangle_major_side_um"))
+    if rmn is not None and rmj is not None and rmn > 0 and rmj > 0:
+        if eang is None:
+            eang = 0.0
+        rectangle = {
+            "center": center,
+            "sizes": (float(rmn), float(rmj)),
+            "angle": float(eang),
+        }
+    else:
+        rectangle = base_info.get("rectangle")
+
+    return {
+        "shape_class": shape_name,
+        "center": base_info["center"],
+        "circle_diameter": float(circle_diameter),
+        "ellipse": ellipse,
+        "rectangle": rectangle,
+    }
+
+
+def _vis_update_shape_controls(self, shape_info):
+    allowed = set()
+    if shape_info is not None:
+        allowed = set(_vis_shape_types_for_class(shape_info.get("shape_class")))
+
+    available = {
+        "circle": (
+            "circle" in allowed and float(shape_info.get("circle_diameter", 0.0)) > 0
+            if shape_info is not None
+            else False
+        ),
+        "ellipse": (
+            "ellipse" in allowed and shape_info.get("ellipse") is not None
+            if shape_info is not None
+            else False
+        ),
+        "rectangle": (
+            "rectangle" in allowed and shape_info.get("rectangle") is not None
+            if shape_info is not None
+            else False
+        ),
+    }
+
+    for key, is_available in available.items():
+        chk = self._vis_shape_checkbuttons.get(key)
+        if chk is not None:
+            if is_available:
+                chk.state(["!disabled"])
+            else:
+                chk.state(["disabled"])
+
+        if is_available:
+            if not self._vis_shape_vars[key].get():
+                self._vis_shape_vars[key].set(True)
+        else:
+            self._vis_shape_vars[key].set(False)
+
+
+def _vis_shape_types_for_class(shape_class):
+    return {
+        "circ": ("circle", "ellipse"),
+        "MLcirc": ("circle", "ellipse"),
+        "shpless": ("circle", "ellipse", "rectangle"),
+        "elongated": ("ellipse", "rectangle"),
+    }.get(shape_class, ())
+
+
+def _vis_transform_points(points, x1_img, y1_img, sx, sy):
+    pts = np.asarray(points, dtype=np.float64)
+    if pts.size == 0:
+        return None
+    pts[:, 0] = (pts[:, 0] - x1_img) * sx
+    pts[:, 1] = (pts[:, 1] - y1_img) * sy
+    return np.round(pts).astype(np.int32).reshape(-1, 1, 2)
+
+
+def _vis_draw_shape_overlays(self, dest_bgr, shape_info, x1_img, y1_img, sx, sy, thickness):
+    allowed = set(_vis_shape_types_for_class(shape_info.get("shape_class")))
+    colors = {
+        "circle": (0, 255, 255),
+        "ellipse": (255, 0, 255),
+        "rectangle": (0, 165, 255),
+    }
+
+    if "circle" in allowed and self._vis_shape_vars["circle"].get():
+        diameter = float(shape_info.get("circle_diameter", 0.0))
+        if diameter > 0:
+            center = shape_info["center"]
+            radius = diameter / 2.0
+            angles = np.linspace(0.0, 2.0 * np.pi, 72, endpoint=False)
+            circle_points = np.column_stack(
+                [
+                    center[0] + radius * np.cos(angles),
+                    center[1] + radius * np.sin(angles),
+                ]
+            )
+            circle = _vis_transform_points(circle_points, x1_img, y1_img, sx, sy)
+            if circle is not None and len(circle) >= 2:
+                cv2.polylines(dest_bgr, [circle], True, colors["circle"], thickness)
+
+    if "ellipse" in allowed and self._vis_shape_vars["ellipse"].get():
+        ellipse = shape_info.get("ellipse")
+        if ellipse is not None:
+            center = ellipse["center"]
+            axes = ellipse["axes"]
+            if axes[0] > 0 and axes[1] > 0:
+                ellipse_points = cv2.ellipse2Poly(
+                    (int(round(center[0])), int(round(center[1]))),
+                    (max(1, int(round(axes[0] / 2.0))), max(1, int(round(axes[1] / 2.0)))),
+                    int(round(ellipse["angle"])),
+                    0,
+                    360,
+                    5,
+                )
+                ellipse_poly = _vis_transform_points(ellipse_points, x1_img, y1_img, sx, sy)
+                if ellipse_poly is not None and len(ellipse_poly) >= 2:
+                    cv2.polylines(dest_bgr, [ellipse_poly], True, colors["ellipse"], thickness)
+
+    if "rectangle" in allowed and self._vis_shape_vars["rectangle"].get():
+        rectangle = shape_info.get("rectangle")
+        if rectangle is not None:
+            center = rectangle["center"]
+            sizes = rectangle["sizes"]
+            if sizes[0] > 0 and sizes[1] > 0:
+                box = cv2.boxPoints(((center[0], center[1]), (sizes[0], sizes[1]), rectangle["angle"]))
+                box_poly = _vis_transform_points(box, x1_img, y1_img, sx, sy)
+                if box_poly is not None and len(box_poly) >= 2:
+                    cv2.polylines(dest_bgr, [box_poly], True, colors["rectangle"], thickness)
