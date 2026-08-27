@@ -6,10 +6,12 @@ import cv2
 try:
     from .binary_tab import binary_tab
     from .processing_tab import processing_tab
+    from .spectrum_tab import spectrum_tab
     from .visualize_tab import visualize_tab
 except ImportError:
     from binary_tab import binary_tab  # type: ignore[reportMissingImports]
     from processing_tab import processing_tab  # type: ignore[reportMissingImports]
+    from spectrum_tab import spectrum_tab  # type: ignore[reportMissingImports]
     from visualize_tab import visualize_tab  # type: ignore[reportMissingImports]
 
 
@@ -57,6 +59,7 @@ class stsmApp:
         self.binary_frame = ttk.Frame(self.notebook)
         self.processing_frame = ttk.Frame(self.notebook)
         self.visualize_frame = ttk.Frame(self.notebook)
+        self.spectrum_frame = ttk.Frame(self.notebook)
 
         # Add tabs to notebook
         # self.notebook.add(self.acquire_frame, text="Acquire")
@@ -65,6 +68,7 @@ class stsmApp:
         self.notebook.add(self.binary_frame, text="Binary")
         self.notebook.add(self.processing_frame, text="Processing")
         self.notebook.add(self.visualize_frame, text="Visualize")
+        self.notebook.add(self.spectrum_frame, text="Spectrum")
 
         # Setup the Binary tab
         binary_tab(self)
@@ -74,6 +78,9 @@ class stsmApp:
 
         # Setup the Visualize tab
         visualize_tab(self)
+
+        # Setup the Spectrum tab
+        spectrum_tab(self)
 
 
 # Ends the mainwindow definitions

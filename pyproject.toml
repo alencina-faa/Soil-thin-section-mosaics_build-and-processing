@@ -22,6 +22,7 @@ dependencies = [
   "Pillow",
   "openpyxl",
   "h5py",
+  "matplotlib",
 ]
 
 [project.optional-dependencies]
