@@ -14,6 +14,7 @@ import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
+from matplotlib.patches import Patch  # noqa: E402
 
 # Shapes/sizes used to segment pores (see proc_mosaic.py). Per user decision, the
 # ellipse minor diameter ("emd") sheets are used as the single size metric for all shapes.
@@ -340,72 +341,86 @@ def _spectrum_end_drag(self, event):
 
 
 # --------------------------------------------------------------------------------------
-# Chart rendering
+# Data Preparation & Chart Rendering (1 Chart per Mosaic)
 # --------------------------------------------------------------------------------------
+def _spectrum_prepare_data(mosaics):
+    """
+    Builds the array of 51 column labels and normalized values (0 to 1) for each mosaic.
+    Categories:
+      1. General stats (3)
+      2. Area fraction (16)
+      3. Average pore area (16, normalized to max across loaded mosaics)
+      4. Pore count (16, normalized to max across loaded mosaics)
+    """
+    combos = [(shape, size) for shape in SHAPES for size in SIZES]
+
+    # Max values for normalization of avg area & count across all loaded mosaics
+    max_avg_area = {c: 0.0 for c in combos}
+    max_count = {c: 0.0 for c in combos}
+
+    for m in mosaics:
+        for c in combos:
+            if m["avg_area"].get(c, 0.0) > max_avg_area[c]:
+                max_avg_area[c] = m["avg_area"][c]
+            if m["count"].get(c, 0.0) > max_count[c]:
+                max_count[c] = m["count"][c]
+
+    labels = []
+    # 1. General stats
+    labels.extend(["Porosity", "% ≤ 50μm", "% > 50μm"])
+
+    # 2. Area fraction
+    for shape, size in combos:
+        labels.append(f"AF {shape}-{size}")
+
+    # 3. Avg area
+    for shape, size in combos:
+        labels.append(f"AvgA {shape}-{size}")
+
+    # 4. Count
+    for shape, size in combos:
+        labels.append(f"Cnt {shape}-{size}")
+
+    data_by_mosaic = {}
+    for m in mosaics:
+        vals = []
+
+        # General stats (ensure values are scale 0..1 if given as percentages > 1)
+        p = m["porosity"]
+        p = p / 100.0 if p > 1.0 else p
+        le = m["pct_le50"]
+        le = le / 100.0 if le > 1.0 else le
+        gt = m["pct_gt50"]
+        gt = gt / 100.0 if gt > 1.0 else gt
+        vals.extend([max(0.0, min(1.0, p)), max(0.0, min(1.0, le)), max(0.0, min(1.0, gt))])
+
+        # Area fraction (16 values)
+        for c in combos:
+            af = m["area_fraction"].get(c, 0.0)
+            af = af / 100.0 if af > 1.0 else af
+            vals.append(max(0.0, min(1.0, af)))
+
+        # Avg area (16 values normalized between 0 and 1)
+        for c in combos:
+            val = m["avg_area"].get(c, 0.0)
+            norm = (val / max_avg_area[c]) if max_avg_area[c] > 0 else 0.0
+            vals.append(max(0.0, min(1.0, norm)))
+
+        # Pore count (16 values normalized between 0 and 1)
+        for c in combos:
+            val = m["count"].get(c, 0.0)
+            norm = (val / max_count[c]) if max_count[c] > 0 else 0.0
+            vals.append(max(0.0, min(1.0, norm)))
+
+        data_by_mosaic[m["name"]] = vals
+
+    return labels, data_by_mosaic
+
+
 def _spectrum_on_holder_resize(self):
     if self._spectrum_redraw_after_id is not None:
         self.root.after_cancel(self._spectrum_redraw_after_id)
     self._spectrum_redraw_after_id = self.root.after(150, lambda: _spectrum_redraw(self))
-
-
-def _spectrum_build_blocks(mosaics):
-    combos = [(shape, size) for shape in SHAPES for size in SIZES]
-    combo_labels = [f"{shape}-{size}" for shape, size in combos]
-
-    general_categories = ["Porosity", "% pores ≤50μm", "% pores >50μm"]
-    general_values = {
-        m["name"]: [m["porosity"], m["pct_le50"], m["pct_gt50"]] for m in mosaics
-    }
-
-    area_fraction_values = {
-        m["name"]: [m["area_fraction"].get(c, 0.0) for c in combos] for m in mosaics
-    }
-
-    avg_area_raw = {m["name"]: [m["avg_area"].get(c, 0.0) for c in combos] for m in mosaics}
-    count_raw = {m["name"]: [m["count"].get(c, 0.0) for c in combos] for m in mosaics}
-
-    avg_area_values = _spectrum_normalize_per_category(avg_area_raw, len(combos))
-    count_values = _spectrum_normalize_per_category(count_raw, len(combos))
-
-    return [
-        ("General stats", general_categories, general_values),
-        ("Area fraction (Σ pore area / image area)", combo_labels, area_fraction_values),
-        ("Average pore area (normalized, edge pores excluded)", combo_labels, avg_area_values),
-        ("Pore count (normalized, edge pores excluded)", combo_labels, count_values),
-    ]
-
-
-def _spectrum_normalize_per_category(raw_by_name, n_categories):
-    maxima = [0.0] * n_categories
-    for values in raw_by_name.values():
-        for i, v in enumerate(values):
-            if v > maxima[i]:
-                maxima[i] = v
-
-    return {
-        name: [(v / maxima[i]) if maxima[i] > 0 else 0.0 for i, v in enumerate(values)]
-        for name, values in raw_by_name.items()
-    }
-
-
-def _spectrum_plot_block(ax, title, categories, values_by_name, mosaic_names, colors):
-    n_cat = len(categories)
-    n_series = max(len(mosaic_names), 1)
-    x = list(range(n_cat))
-    total_width = 0.82
-    bar_width = total_width / n_series
-
-    for i, name in enumerate(mosaic_names):
-        vals = values_by_name.get(name, [0.0] * n_cat)
-        offsets = [xi - total_width / 2 + bar_width * i + bar_width / 2 for xi in x]
-        ax.bar(offsets, vals, width=bar_width * 0.92, label=name, color=colors[i % len(colors)])
-
-    ax.set_title(title, fontsize=9, loc="left")
-    ax.set_xticks(x)
-    ax.set_xticklabels(categories, rotation=45, ha="right", fontsize=7)
-    ax.set_ylim(0, 1.05)
-    ax.tick_params(axis="y", labelsize=7)
-    ax.margins(x=0.01)
 
 
 def _spectrum_apply_figure_size(self, rows):
@@ -451,33 +466,62 @@ def _spectrum_redraw(self):
         _spectrum_show_message(self, "Load Global_Pore_Stats.xlsx to begin.")
         return
 
-    visible_names = [m["name"] for m in self.spectrum_mosaics if m["enabled"].get()]
-    if not visible_names:
+    visible_mosaics = [m for m in self.spectrum_mosaics if m["enabled"].get()]
+    if not visible_mosaics:
         _spectrum_show_message(self, "No mosaics selected for display.")
         return
 
-    blocks = _spectrum_build_blocks(self.spectrum_mosaics)
-    colors = matplotlib.colormaps["tab10"].colors
+    labels, data_by_mosaic = _spectrum_prepare_data(self.spectrum_mosaics)
+    n_mosaics = len(visible_mosaics)
 
-    n_rows = len(blocks)
-    axes = self.spectrum_figure.subplots(n_rows, 1)
-    if n_rows == 1:
+    # Create 1 subplot per visible mosaic (stacked vertically)
+    axes = self.spectrum_figure.subplots(n_mosaics, 1, sharex=True)
+    if n_mosaics == 1:
         axes = [axes]
 
-    for ax, (title, categories, values_by_name) in zip(axes, blocks):
-        _spectrum_plot_block(ax, title, categories, values_by_name, visible_names, colors)
+    # Distinguish categories by color: Blue (General), Green (Area Fraction), Orange (Avg Area), Purple (Count)
+    bar_colors = ["#1f77b4"] * 3 + ["#2ca02c"] * 16 + ["#ff7f0e"] * 16 + ["#9467bd"] * 16
+    x = list(range(len(labels)))
 
-    handles, labels = axes[0].get_legend_handles_labels()
+    for idx, m in enumerate(visible_mosaics):
+        ax = axes[idx]
+        vals = data_by_mosaic.get(m["name"], [0.0] * len(labels))
+        ax.bar(x, vals, color=bar_colors, width=0.8)
+        ax.set_ylim(0, 1.05)
+        ax.set_title(f"Mosaic: {m['name']}", fontsize=9, loc="left", fontweight="bold")
+        ax.tick_params(axis="y", labelsize=7)
+        ax.margins(x=0.01)
+
+        # Dashed vertical separators between category groups
+        ax.axvline(2.5, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
+        ax.axvline(18.5, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
+        ax.axvline(34.5, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
+
+        # Tick labels on bottom axis
+        if idx == n_mosaics - 1:
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels, rotation=90, ha="center", fontsize=6.5)
+            ax.tick_params(axis="x", labelbottom=True)
+        else:
+            ax.set_xticks(x)
+            ax.tick_params(axis="x", labelbottom=False)
+
+    # Figure legend for metric groups
+    legend_elements = [
+        Patch(facecolor="#1f77b4", label="General Stats"),
+        Patch(facecolor="#2ca02c", label="Area Fraction"),
+        Patch(facecolor="#ff7f0e", label="Avg Area (norm)"),
+        Patch(facecolor="#9467bd", label="Pore Count (norm)"),
+    ]
     self.spectrum_figure.legend(
-        handles,
-        labels,
+        handles=legend_elements,
         loc="upper center",
-        ncol=min(len(visible_names), 6),
+        ncol=4,
         fontsize=8,
-        bbox_to_anchor=(0.5, 1.0),
+        bbox_to_anchor=(0.5, 1.01),
     )
-    self.spectrum_figure.tight_layout(rect=[0, 0, 1, 0.94])
+    self.spectrum_figure.tight_layout(rect=[0, 0, 1, 0.95])
 
-    _spectrum_apply_figure_size(self, n_rows)
+    _spectrum_apply_figure_size(self, n_mosaics)
     self.spectrum_canvas_agg.draw()
     _spectrum_update_scrollregion(self)
