@@ -23,6 +23,10 @@ dependencies = [
   "openpyxl",
   "h5py",
   "matplotlib",
+  "pandas",
+  "scipy",
+  "seaborn",
+  "scikit-learn",
 ]
 
 [project.optional-dependencies]
