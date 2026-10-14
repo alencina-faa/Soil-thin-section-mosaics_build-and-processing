@@ -9,6 +9,7 @@ def main():
 
     return app_main()
 
+
 __all__ = [
     "detect_edge_contours_optimized",
     "enhanced_process_mosaic_optimized",

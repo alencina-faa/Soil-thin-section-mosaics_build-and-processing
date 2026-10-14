@@ -1,5 +1,6 @@
 import math
 import os
+
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
@@ -59,11 +60,20 @@ def process_h5_file(file_path):
                     for key, item in group.items():
                         if isinstance(item, h5py.Dataset) and item.shape in [(), (1,)]:
                             value = np.asarray(item[()])
-                            if value.size == 1 and np.issubdtype(value.dtype, np.number) and not np.issubdtype(value.dtype, np.bool_):
+                            if (
+                                value.size == 1
+                                and np.issubdtype(value.dtype, np.number)
+                                and not np.issubdtype(value.dtype, np.bool_)
+                            ):
                                 record[key] = float(value.item())
 
                 shape = record.get("shape_score")
-                if shape is None and "area" in record and "perimeter" in record and record["perimeter"] > 0:
+                if (
+                    shape is None
+                    and "area" in record
+                    and "perimeter" in record
+                    and record["perimeter"] > 0
+                ):
                     shape = 4.0 * math.pi * record["area"] / record["perimeter"] ** 2
                     record["shape_score"] = shape
 
@@ -73,11 +83,13 @@ def process_h5_file(file_path):
                     convex_val = float(convex_shape)
                     irregularity_val = math.atan(shape_val / convex_val)
 
-                    record.update({
-                        "Shape": shape_val,
-                        "Convex Shape": convex_val,
-                        "Irregularity": irregularity_val,
-                    })
+                    record.update(
+                        {
+                            "Shape": shape_val,
+                            "Convex Shape": convex_val,
+                            "Irregularity": irregularity_val,
+                        }
+                    )
                     record.setdefault("irregularity", irregularity_val)
                     data.append(record)
 
@@ -115,7 +127,9 @@ def run_multivariate_analysis(df, sample_col="Muestra"):
     feature_cols = [c for c in candidate_features if c in df.columns]
     if not feature_cols:
         ignore_cols = {sample_col, "Contour_ID", "is_edge", "is_over_50um"}
-        feature_cols = sorted([c for c in df.columns if c not in ignore_cols and pd.api.types.is_numeric_dtype(df[c])])
+        feature_cols = sorted(
+            [c for c in df.columns if c not in ignore_cols and pd.api.types.is_numeric_dtype(df[c])]
+        )
 
     eligible_mask = pd.Series(True, index=df.index)
     if "is_edge" in df.columns:
@@ -137,7 +151,7 @@ def run_multivariate_analysis(df, sample_col="Muestra"):
     detail_records = []
 
     for sample1_index, sample1_name in enumerate(samples[:-1]):
-        for sample2_name in samples[sample1_index + 1:]:
+        for sample2_name in samples[sample1_index + 1 :]:
             sample1_mask = eligible_df[sample_col] == sample1_name
             sample2_mask = eligible_df[sample_col] == sample2_name
             sample1 = features.loc[sample1_mask].dropna(subset=feature_cols)
@@ -179,9 +193,7 @@ def run_multivariate_analysis(df, sample_col="Muestra"):
 
             df1 = feature_count
             df2 = n1 + n2 - feature_count - 1
-            f_statistic = (
-                (df2 / (feature_count * (n1 + n2 - 2))) * t_squared if df2 > 0 else np.nan
-            )
+            f_statistic = (df2 / (feature_count * (n1 + n2 - 2))) * t_squared if df2 > 0 else np.nan
             p_value = float(stats.f.sf(f_statistic, df1, df2)) if df2 > 0 else np.nan
 
             # 2. Random Forest Classifier
@@ -200,10 +212,7 @@ def run_multivariate_analysis(df, sample_col="Muestra"):
 
             # 3. Permutation Feature Importance (Basada en la caída de ROC-AUC)
             perm_res = permutation_importance(
-                classifier, values, labels,
-                scoring='roc_auc',
-                n_repeats=10,
-                random_state=42
+                classifier, values, labels, scoring="roc_auc", n_repeats=10, random_state=42
             )
             drop_auc_mean = perm_res.importances_mean
             drop_auc_clipped = np.maximum(0, drop_auc_mean)
@@ -212,16 +221,18 @@ def run_multivariate_analysis(df, sample_col="Muestra"):
             else:
                 importances_pct = np.zeros_like(drop_auc_clipped)
 
-            summary.update({
-                "Dist. Mahalanobis (D_M)": mahalanobis_distance,
-                "Hotelling T^2": t_squared,
-                "F-Estadístico": f_statistic,
-                "p-valor (Hotelling)": p_value,
-                "Diferencia Multivariada": (
-                    "Sí (p < 0.05)" if p_value < 0.05 else "No Significativa"
-                ),
-                "RF AUC-ROC (OOB Score)": auc_score,
-            })
+            summary.update(
+                {
+                    "Dist. Mahalanobis (D_M)": mahalanobis_distance,
+                    "Hotelling T^2": t_squared,
+                    "F-Estadístico": f_statistic,
+                    "p-valor (Hotelling)": p_value,
+                    "Diferencia Multivariada": (
+                        "Sí (p < 0.05)" if p_value < 0.05 else "No Significativa"
+                    ),
+                    "RF AUC-ROC (OOB Score)": auc_score,
+                }
+            )
 
             pair_records = []
             for index, column in enumerate(feature_cols):
@@ -233,27 +244,33 @@ def run_multivariate_analysis(df, sample_col="Muestra"):
                 cohen_d = abs(column_mean1 - column_mean2) / pooled_std if pooled_std > 0 else 0.0
 
                 # Registro para la Matriz Pivoteada
-                ranking_records.append({
-                    "Muestra 1": sample1_name,
-                    "Muestra 2": sample2_name,
-                    "Variable": column,
-                    "Importancia Permutación RF (%)": importances_pct[index]
-                })
+                ranking_records.append(
+                    {
+                        "Muestra 1": sample1_name,
+                        "Muestra 2": sample2_name,
+                        "Variable": column,
+                        "Importancia Permutación RF (%)": importances_pct[index],
+                    }
+                )
 
                 # Registro para la Tabla de Detalles Estadísticos
-                pair_records.append({
-                    "Muestra 1": sample1_name,
-                    "Muestra 2": sample2_name,
-                    "Variable": column,
-                    "Tamaño Efecto (d de Cohen)": cohen_d,
-                    f"Media ({sample1_name})": column_mean1,
-                    f"DE ({sample1_name})": column_std1,
-                    f"Media ({sample2_name})": column_mean2,
-                    f"DE ({sample2_name})": column_std2,
-                    "Importancia Permutación RF (%)": importances_pct[index]
-                })
+                pair_records.append(
+                    {
+                        "Muestra 1": sample1_name,
+                        "Muestra 2": sample2_name,
+                        "Variable": column,
+                        "Tamaño Efecto (d de Cohen)": cohen_d,
+                        f"Media ({sample1_name})": column_mean1,
+                        f"DE ({sample1_name})": column_std1,
+                        f"Media ({sample2_name})": column_mean2,
+                        f"DE ({sample2_name})": column_std2,
+                        "Importancia Permutación RF (%)": importances_pct[index],
+                    }
+                )
 
-            pair_records.sort(key=lambda record: record["Importancia Permutación RF (%)"], reverse=True)
+            pair_records.sort(
+                key=lambda record: record["Importancia Permutación RF (%)"], reverse=True
+            )
             for rank, record in enumerate(pair_records, start=1):
                 del record["Importancia Permutación RF (%)"]
                 record_with_rank = {"Ranking": rank}
@@ -263,15 +280,17 @@ def run_multivariate_analysis(df, sample_col="Muestra"):
     # Crear Matriz Pivoteada (Variables en Filas, Pares Muestra 1 vs Muestra 2 en Columnas)
     ranking_df = pd.DataFrame(ranking_records)
     pivot_matrix_df = ranking_df.pivot(
-        index="Variable", 
-        columns=["Muestra 1", "Muestra 2"], 
-        values="Importancia Permutación RF (%)"
+        index="Variable",
+        columns=["Muestra 1", "Muestra 2"],
+        values="Importancia Permutación RF (%)",
     )
 
     return pd.DataFrame(summary_records), pivot_matrix_df, pd.DataFrame(detail_records)
 
 
-def add_multivariate_tab_to_excel(excel_path, summary, ranking_pivot, detail, sheet_name="Análisis Multivariado Global"):
+def add_multivariate_tab_to_excel(
+    excel_path, summary, ranking_pivot, detail, sheet_name="Análisis Multivariado Global"
+):
     """
     Añade la pestaña 'Análisis Multivariado Global' organizando el resumen,
     la matriz pivoteada de importancia de variables (estilo imagen) y los detalles univariados.
@@ -295,7 +314,9 @@ def add_multivariate_tab_to_excel(excel_path, summary, ranking_pivot, detail, sh
     )
 
     # Título principal
-    worksheet.cell(row=1, column=1, value="ANÁLISIS ESTADÍSTICO MULTIVARIADO (p VARIABLES)").font = title_font
+    worksheet.cell(
+        row=1, column=1, value="ANÁLISIS ESTADÍSTICO MULTIVARIADO (p VARIABLES)"
+    ).font = title_font
     worksheet.cell(
         row=2,
         column=1,
@@ -303,7 +324,9 @@ def add_multivariate_tab_to_excel(excel_path, summary, ranking_pivot, detail, sh
     ).font = Font(italic=True, size=10, color="595959")
 
     # 1. Resumen Global
-    worksheet.cell(row=4, column=1, value="1. Resumen de Pruebas Multivariadas Globales").font = section_font
+    worksheet.cell(row=4, column=1, value="1. Resumen de Pruebas Multivariadas Globales").font = (
+        section_font
+    )
     summary_df = summary if isinstance(summary, pd.DataFrame) else pd.DataFrame([summary])
     for row_index, row in enumerate(
         dataframe_to_rows(summary_df, index=False, header=True), start=5
@@ -319,12 +342,15 @@ def add_multivariate_tab_to_excel(excel_path, summary, ranking_pivot, detail, sh
                 cell.font = regular_font
                 cell.alignment = Alignment(horizontal="center", vertical="center")
                 if isinstance(cell.value, float):
-                    cell.value = round(cell.value, 6) if abs(cell.value) < 0.001 else round(cell.value, 4)
+                    cell.value = (
+                        round(cell.value, 6) if abs(cell.value) < 0.001 else round(cell.value, 4)
+                    )
 
     # 2. Matriz de Contribución por Variable (Pivoteada estilo Imagen)
     ranking_start = worksheet.max_row + 3
     worksheet.cell(
-        row=ranking_start, column=1,
+        row=ranking_start,
+        column=1,
         value="2. Matriz de Contribución por Variable - Importancia Permutación RF (%)",
     ).font = section_font
 
@@ -359,14 +385,18 @@ def add_multivariate_tab_to_excel(excel_path, summary, ranking_pivot, detail, sh
         cell_m2.border = thin_border
 
     # Escribir filas de variables y valores
-    for row_idx, (var_name, row_series) in enumerate(ranking_pivot.iterrows(), start=header_row_2 + 1):
+    for row_idx, (var_name, row_series) in enumerate(
+        ranking_pivot.iterrows(), start=header_row_2 + 1
+    ):
         c_var = worksheet.cell(row=row_idx, column=1, value=str(var_name))
         c_var.font = bold_font
         c_var.alignment = Alignment(horizontal="left", vertical="center")
         c_var.border = thin_border
 
         for col_idx, val in enumerate(row_series, start=2):
-            c_val = worksheet.cell(row=row_idx, column=col_idx, value=float(val) if pd.notnull(val) else None)
+            c_val = worksheet.cell(
+                row=row_idx, column=col_idx, value=float(val) if pd.notnull(val) else None
+            )
             c_val.font = regular_font
             c_val.alignment = Alignment(horizontal="right", vertical="center")
             c_val.border = thin_border
@@ -376,7 +406,8 @@ def add_multivariate_tab_to_excel(excel_path, summary, ranking_pivot, detail, sh
     # 3. Detalles Estadísticos Univariados (d de Cohen, Medias, DE)
     detail_start = worksheet.max_row + 3
     worksheet.cell(
-        row=detail_start, column=1,
+        row=detail_start,
+        column=1,
         value="3. Detalles Estadísticos Univariados por Variable (Tamaño de Efecto d de Cohen, Medias y DE)",
     ).font = section_font
     header_row_detail = detail_start + 1
@@ -394,8 +425,9 @@ def add_multivariate_tab_to_excel(excel_path, summary, ranking_pivot, detail, sh
                 cell.font = bold_font if column_index <= 3 else regular_font
                 cell.alignment = Alignment(
                     horizontal=(
-                        "left" if column_index in (1, 2, 4) else
-                        "center" if column_index == 3 else "right"
+                        "left"
+                        if column_index in (1, 2, 4)
+                        else "center" if column_index == 3 else "right"
                     ),
                     vertical="center",
                 )
@@ -428,19 +460,35 @@ def ks2d2s(x1, y1, x2, y2):
     if len(eval_x) > 400:
         idx = np.random.choice(len(eval_x), 400, replace=False)
         eval_x, eval_y = eval_x[idx], eval_y[idx]
-    f1_q1 = np.mean((d1[:, 0][:, None] <= eval_x[None, :]) & (d1[:, 1][:, None] <= eval_y[None, :]), axis=0)
-    f2_q1 = np.mean((d2[:, 0][:, None] <= eval_x[None, :]) & (d2[:, 1][:, None] <= eval_y[None, :]), axis=0)
-    f1_q2 = np.mean((d1[:, 0][:, None] <= eval_x[None, :]) & (d1[:, 1][:, None] >= eval_y[None, :]), axis=0)
-    f2_q2 = np.mean((d2[:, 0][:, None] <= eval_x[None, :]) & (d2[:, 1][:, None] >= eval_y[None, :]), axis=0)
-    f1_q3 = np.mean((d1[:, 0][:, None] >= eval_x[None, :]) & (d1[:, 1][:, None] <= eval_y[None, :]), axis=0)
-    f2_q3 = np.mean((d2[:, 0][:, None] >= eval_x[None, :]) & (d2[:, 1][:, None] <= eval_y[None, :]), axis=0)
-    f1_q4 = np.mean((d1[:, 0][:, None] >= eval_x[None, :]) & (d1[:, 1][:, None] >= eval_y[None, :]), axis=0)
-    f2_q4 = np.mean((d2[:, 0][:, None] >= eval_x[None, :]) & (d2[:, 1][:, None] >= eval_y[None, :]), axis=0)
+    f1_q1 = np.mean(
+        (d1[:, 0][:, None] <= eval_x[None, :]) & (d1[:, 1][:, None] <= eval_y[None, :]), axis=0
+    )
+    f2_q1 = np.mean(
+        (d2[:, 0][:, None] <= eval_x[None, :]) & (d2[:, 1][:, None] <= eval_y[None, :]), axis=0
+    )
+    f1_q2 = np.mean(
+        (d1[:, 0][:, None] <= eval_x[None, :]) & (d1[:, 1][:, None] >= eval_y[None, :]), axis=0
+    )
+    f2_q2 = np.mean(
+        (d2[:, 0][:, None] <= eval_x[None, :]) & (d2[:, 1][:, None] >= eval_y[None, :]), axis=0
+    )
+    f1_q3 = np.mean(
+        (d1[:, 0][:, None] >= eval_x[None, :]) & (d1[:, 1][:, None] <= eval_y[None, :]), axis=0
+    )
+    f2_q3 = np.mean(
+        (d2[:, 0][:, None] >= eval_x[None, :]) & (d2[:, 1][:, None] <= eval_y[None, :]), axis=0
+    )
+    f1_q4 = np.mean(
+        (d1[:, 0][:, None] >= eval_x[None, :]) & (d1[:, 1][:, None] >= eval_y[None, :]), axis=0
+    )
+    f2_q4 = np.mean(
+        (d2[:, 0][:, None] >= eval_x[None, :]) & (d2[:, 1][:, None] >= eval_y[None, :]), axis=0
+    )
     d_max = max(
         np.max(np.abs(f1_q1 - f2_q1)),
         np.max(np.abs(f1_q2 - f2_q2)),
         np.max(np.abs(f1_q3 - f2_q3)),
-        np.max(np.abs(f1_q4 - f2_q4))
+        np.max(np.abs(f1_q4 - f2_q4)),
     )
     n_eff = (n1 * n2) / (n1 + n2)
     r1 = np.corrcoef(x1, y1)[0, 1] if n1 > 1 else 0
@@ -450,7 +498,7 @@ def ks2d2s(x1, y1, x2, y2):
         r = 0.0
     denom = 1.0 + np.sqrt(1.0 - r**2) * (0.25 - 0.75 / np.sqrt(n_eff))
     z = d_max * np.sqrt(n_eff) / denom if denom > 0 else d_max * np.sqrt(n_eff)
-    p_val = 2.0 * np.exp(-2.0 * (z ** 2))
+    p_val = 2.0 * np.exp(-2.0 * (z**2))
     p_val = np.clip(p_val, 0.0, 1.0)
     return d_max, p_val
 
@@ -533,15 +581,15 @@ def process_all_mosaics(root_directory, output_excel="Resultados_Poros_Global.xl
     summary_rows = []
     for filename, df in file_dfs.items():
         clean_name = filename.replace(".h5", "").replace(".hdf5", "")
-        row = {'Muestra': clean_name, 'Cantidad Poros (n)': len(df)}
-        for col in ['Shape', 'Convex Shape', 'Irregularity']:
+        row = {"Muestra": clean_name, "Cantidad Poros (n)": len(df)}
+        for col in ["Shape", "Convex Shape", "Irregularity"]:
             if col in df.columns:
                 vals = df[col]
-                row[f'{col} Promedio'] = round(vals.mean(), 4)
-                row[f'{col} Desv.Std'] = round(vals.std(), 4)
-                row[f'{col} Mediana'] = round(vals.median(), 4)
-                row[f'{col} Q25'] = round(vals.quantile(0.25), 4)
-                row[f'{col} Q75'] = round(vals.quantile(0.75), 4)
+                row[f"{col} Promedio"] = round(vals.mean(), 4)
+                row[f"{col} Desv.Std"] = round(vals.std(), 4)
+                row[f"{col} Mediana"] = round(vals.median(), 4)
+                row[f"{col} Q25"] = round(vals.quantile(0.25), 4)
+                row[f"{col} Q75"] = round(vals.quantile(0.75), 4)
         summary_rows.append(row)
     df_summary = pd.DataFrame(summary_rows)
 
@@ -553,26 +601,40 @@ def process_all_mosaics(root_directory, output_excel="Resultados_Poros_Global.xl
             f1, f2 = filenames_list[i], filenames_list[j]
             d1, d2 = file_dfs[f1], file_dfs[f2]
             d_stat, p_val_ks = ks2d2s(
-                d1["Convex Shape"], d1["Irregularity"],
-                d2["Convex Shape"], d2["Irregularity"]
+                d1["Convex Shape"], d1["Irregularity"], d2["Convex Shape"], d2["Irregularity"]
             )
             d_m, t2_stat, f_stat, p_val_t2 = hotelling_t2_2samp(
-                d1["Convex Shape"], d1["Irregularity"],
-                d2["Convex Shape"], d2["Irregularity"]
+                d1["Convex Shape"], d1["Irregularity"], d2["Convex Shape"], d2["Irregularity"]
             )
-            p_ks_str = f"{p_val_ks:.2e}" if (not np.isnan(p_val_ks) and p_val_ks < 0.001) else (round(p_val_ks, 4) if not np.isnan(p_val_ks) else "N/A")
-            p_t2_str = f"{p_val_t2:.2e}" if (not np.isnan(p_val_t2) and p_val_t2 < 0.001) else (round(p_val_t2, 4) if not np.isnan(p_val_t2) else "N/A")
-            ks_rows.append({
-                "Muestra 1": f1.replace(".h5", "").replace(".hdf5", ""),
-                "Muestra 2": f2.replace(".h5", "").replace(".hdf5", ""),
-                "Estadístico D (K-S 2D)": round(d_stat, 4) if not np.isnan(d_stat) else "N/A",
-                "p-valor (K-S 2D)": p_ks_str,
-                "Sig. K-S 2D (α=0.05)": "Sí" if (not np.isnan(p_val_ks) and p_val_ks < 0.05) else "No",
-                "Dist. Mahalanobis (D_M)": round(d_m, 4) if not np.isnan(d_m) else "N/A",
-                "Estadístico T² (Hotelling)": round(t2_stat, 2) if not np.isnan(t2_stat) else "N/A",
-                "p-valor (Hotelling T²)": p_t2_str,
-                "Sig. Hotelling T² (α=0.05)": "Sí" if (not np.isnan(p_val_t2) and p_val_t2 < 0.05) else "No"
-            })
+            p_ks_str = (
+                f"{p_val_ks:.2e}"
+                if (not np.isnan(p_val_ks) and p_val_ks < 0.001)
+                else (round(p_val_ks, 4) if not np.isnan(p_val_ks) else "N/A")
+            )
+            p_t2_str = (
+                f"{p_val_t2:.2e}"
+                if (not np.isnan(p_val_t2) and p_val_t2 < 0.001)
+                else (round(p_val_t2, 4) if not np.isnan(p_val_t2) else "N/A")
+            )
+            ks_rows.append(
+                {
+                    "Muestra 1": f1.replace(".h5", "").replace(".hdf5", ""),
+                    "Muestra 2": f2.replace(".h5", "").replace(".hdf5", ""),
+                    "Estadístico D (K-S 2D)": round(d_stat, 4) if not np.isnan(d_stat) else "N/A",
+                    "p-valor (K-S 2D)": p_ks_str,
+                    "Sig. K-S 2D (α=0.05)": (
+                        "Sí" if (not np.isnan(p_val_ks) and p_val_ks < 0.05) else "No"
+                    ),
+                    "Dist. Mahalanobis (D_M)": round(d_m, 4) if not np.isnan(d_m) else "N/A",
+                    "Estadístico T² (Hotelling)": (
+                        round(t2_stat, 2) if not np.isnan(t2_stat) else "N/A"
+                    ),
+                    "p-valor (Hotelling T²)": p_t2_str,
+                    "Sig. Hotelling T² (α=0.05)": (
+                        "Sí" if (not np.isnan(p_val_t2) and p_val_t2 < 0.05) else "No"
+                    ),
+                }
+            )
     df_ks = pd.DataFrame(ks_rows)
 
     # D. Generación de Gráficos Temporales
@@ -582,17 +644,20 @@ def process_all_mosaics(root_directory, output_excel="Resultados_Poros_Global.xl
     plt.figure(figsize=(10, 6))
     for filename, df in file_dfs.items():
         plt.scatter(
-            df["Convex Shape"], df["Irregularity"], 
-            label=filename.replace(".h5", "").replace(".hdf5", ""), 
-            alpha=0.6, edgecolors='none', s=25
+            df["Convex Shape"],
+            df["Irregularity"],
+            label=filename.replace(".h5", "").replace(".hdf5", ""),
+            alpha=0.6,
+            edgecolors="none",
+            s=25,
         )
     plt.xlabel("Convex Shape", fontsize=12)
     plt.ylabel("Irregularity = atan(Shape / Convex Shape)", fontsize=12)
-    plt.title("Irregularity vs. Convex Shape por Archivo", fontsize=14, fontweight='bold')
+    plt.title("Irregularity vs. Convex Shape por Archivo", fontsize=14, fontweight="bold")
     plt.grid(True, linestyle="--", alpha=0.5)
-    plt.legend(title="Archivos", bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.legend(title="Archivos", bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.tight_layout()
-    plt.savefig(img_scatter_path, dpi=200, bbox_inches='tight')
+    plt.savefig(img_scatter_path, dpi=200, bbox_inches="tight")
     plt.close()
 
     num_samples = len(file_dfs)
@@ -607,11 +672,17 @@ def process_all_mosaics(root_directory, output_excel="Resultados_Poros_Global.xl
         ax = axes_flat[idx]
         clean_name = filename.replace(".h5", "").replace(".hdf5", "")
         sns.kdeplot(
-            data=df, x="Convex Shape", y="Irregularity",
-            ax=ax, cmap="Blues", fill=True, thresh=0.05, levels=10
+            data=df,
+            x="Convex Shape",
+            y="Irregularity",
+            ax=ax,
+            cmap="Blues",
+            fill=True,
+            thresh=0.05,
+            levels=10,
         )
-        ax.scatter(df["Convex Shape"], df["Irregularity"], s=6, alpha=0.15, color='darkblue')
-        ax.set_title(f"Muestra: {clean_name} (n={len(df)})", fontsize=11, fontweight='bold')
+        ax.scatter(df["Convex Shape"], df["Irregularity"], s=6, alpha=0.15, color="darkblue")
+        ax.set_title(f"Muestra: {clean_name} (n={len(df)})", fontsize=11, fontweight="bold")
         ax.set_xlabel("Convex Shape", fontsize=10)
         ax.set_ylabel("Irregularity = atan(Shape / Convex Shape)", fontsize=10)
         ax.grid(True, linestyle="--", alpha=0.4)
@@ -619,27 +690,36 @@ def process_all_mosaics(root_directory, output_excel="Resultados_Poros_Global.xl
         ax.set_ylim(0, 0.85)
 
     for idx in range(num_samples, len(axes_flat)):
-        axes_flat[idx].axis('off')
+        axes_flat[idx].axis("off")
 
-    plt.suptitle("Mapas de Densidad Kernel 2D (Irregularity vs. Convex Shape)", fontsize=14, fontweight='bold', y=0.99)
+    plt.suptitle(
+        "Mapas de Densidad Kernel 2D (Irregularity vs. Convex Shape)",
+        fontsize=14,
+        fontweight="bold",
+        y=0.99,
+    )
     plt.tight_layout()
-    plt.savefig(img_kde_path, dpi=200, bbox_inches='tight')
+    plt.savefig(img_kde_path, dpi=200, bbox_inches="tight")
     plt.close()
 
     # E. Guardar en Excel con openpyxl
     excel_path = os.path.join(root_directory, output_excel)
-    with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+    with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
         final_excel_df.to_excel(writer, sheet_name="Datos Poros")
         df_summary.to_excel(writer, sheet_name="Estadísticas Descriptivas", index=False)
         df_ks.to_excel(writer, sheet_name="Prueba K-S 2D", index=False)
 
     wb = openpyxl.load_workbook(excel_path)
     ws_chart = wb.create_sheet(title="Gráficos")
-    ws_chart.cell(row=2, column=2, value="1. Gráfico de Dispersión Global (Irregularity vs. Convex Shape)").font = openpyxl.styles.Font(bold=True, size=12)
+    ws_chart.cell(
+        row=2, column=2, value="1. Gráfico de Dispersión Global (Irregularity vs. Convex Shape)"
+    ).font = openpyxl.styles.Font(bold=True, size=12)
     img_scatter = Image(img_scatter_path)
     ws_chart.add_image(img_scatter, "B4")
 
-    ws_chart.cell(row=38, column=2, value="2. Mapas de Densidad Kernel 2D (KDE 2D) - Mosaico Comparativo").font = openpyxl.styles.Font(bold=True, size=12)
+    ws_chart.cell(
+        row=38, column=2, value="2. Mapas de Densidad Kernel 2D (KDE 2D) - Mosaico Comparativo"
+    ).font = openpyxl.styles.Font(bold=True, size=12)
     img_kde = Image(img_kde_path)
     ws_chart.add_image(img_kde, "B40")
     wb.save(excel_path)
@@ -647,10 +727,7 @@ def process_all_mosaics(root_directory, output_excel="Resultados_Poros_Global.xl
     # F. Generar e Insertar Análisis Multivariado p-Dimensional
     if len(file_dfs) >= 2:
         multivariate_df = pd.concat(
-            [
-                df.assign(Muestra=os.path.splitext(filename)[0])
-                for filename, df in file_dfs.items()
-            ],
+            [df.assign(Muestra=os.path.splitext(filename)[0]) for filename, df in file_dfs.items()],
             ignore_index=True,
         )
         try:
@@ -665,7 +742,7 @@ def process_all_mosaics(root_directory, output_excel="Resultados_Poros_Global.xl
     if os.path.exists(img_kde_path):
         os.remove(img_kde_path)
 
-    print(f"\n¡Proceso completado exitosamente!")
+    print("\n¡Proceso completado exitosamente!")
     print(f"📊 Archivo Excel generado: {excel_path}")
 
 

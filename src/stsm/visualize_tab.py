@@ -12,8 +12,9 @@ from PIL import Image, ImageTk
 
 try:
     from .proc_mosaic import fit_constrained_area_Ellipse
-except:
+except ImportError:
     from proc_mosaic import fit_constrained_area_Ellipse  # type: ignore[reportMissingImports]
+
 
 def visualize_tab(self):
     # State variables for this tab
@@ -153,9 +154,9 @@ def visualize_tab(self):
     self._vis_shape_checkbuttons = {}
 
     self.vis_units_var = tk.StringVar(value="Units: -")
-    ttk.Label(self.visualize_frame_controls, textvariable=self.vis_units_var, foreground="gray").pack(
-        pady=(10, 0), fill=tk.X
-    )
+    ttk.Label(
+        self.visualize_frame_controls, textvariable=self.vis_units_var, foreground="gray"
+    ).pack(pady=(10, 0), fill=tk.X)
 
     for key, label in [
         ("index", "Pore_id"),
@@ -906,7 +907,9 @@ def _vis_draw_shape_overlays(self, dest_bgr, shape_info, x1_img, y1_img, sx, sy,
             center = rectangle["center"]
             sizes = rectangle["sizes"]
             if sizes[0] > 0 and sizes[1] > 0:
-                box = cv2.boxPoints(((center[0], center[1]), (sizes[0], sizes[1]), rectangle["angle"]))
+                box = cv2.boxPoints(
+                    ((center[0], center[1]), (sizes[0], sizes[1]), rectangle["angle"])
+                )
                 box_poly = _vis_transform_points(box, x1_img, y1_img, sx, sy)
                 if box_poly is not None and len(box_poly) >= 2:
                     cv2.polylines(dest_bgr, [box_poly], True, colors["rectangle"], thickness)

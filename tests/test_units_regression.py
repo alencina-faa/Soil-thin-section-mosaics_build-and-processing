@@ -81,8 +81,8 @@ def test_save_hdf5_does_not_double_convert_micron_metrics(tmp_path, monkeypatch)
     parent = np.array([[[1, 1]], [[1, 5]], [[5, 5]], [[5, 1]]], dtype=np.int32)
     child = np.array([[[2, 2]], [[2, 3]], [[3, 3]], [[3, 2]]], dtype=np.int32)
 
-    # Already in microns: area=50 um^2, perimeter=40 um.
-    app.processed_contours = [[0, False, parent, [child], 50.0, 40.0]]
+    # Already in microns and above the 50 um diameter save threshold.
+    app.processed_contours = [[0, False, parent, [child], 2500.0, 200.0]]
     app.calibration = 2.0
 
     # Avoid GUI side effects in tests.
@@ -107,7 +107,7 @@ def test_save_hdf5_does_not_double_convert_micron_metrics(tmp_path, monkeypatch)
 
     with h5py.File(h5_path, "r") as f:
         cg = f["contours"]["0"]
-        assert float(cg.attrs["area"]) == pytest.approx(50.0)
-        assert float(cg.attrs["perimeter"]) == pytest.approx(40.0)
+        assert float(cg.attrs["area"]) == pytest.approx(2500.0)
+        assert float(cg.attrs["perimeter"]) == pytest.approx(200.0)
         assert str(cg.attrs["area_unit"]) == "μm^2"
         assert str(cg.attrs["perimeter_unit"]) == "μm"

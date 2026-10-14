@@ -301,36 +301,38 @@ def proc_cont_all(self):
         pct_great_50,  # Percentage of pores less than 50 micron
     )
 
+
 def fit_constrained_area_Ellipse(contour):
     """
-    Fits an ellipse to a contour with the strict constraint 
+    Fits an ellipse to a contour with the strict constraint
     that the fitted ellipse matches the contour's exact area.
     """
     # 1. Ensure contour has enough points to fit an ellipse
     if len(contour) < 5:
         raise ValueError("Contour must contain at least 5 points.")
-    
+
     # 2. Get the actual target area of the contour
     contour_area = cv2.contourArea(contour)
     if contour_area <= 0:
         raise ValueError("Contour area must be greater than zero.")
-        
+
     # 3. Perform standard least-squares ellipse fitting
     # Returns: ((center_x, center_y), (width, height), angle)
     (cx, cy), (w_init, h_init), angle = cv2.fitEllipse(contour)
-    
+
     # 4. Calculate the area of the initially fitted ellipse
     initial_ellipse_area = (np.pi / 4.0) * w_init * h_init
-    
+
     # 5. Compute the scaling factor to match areas
     scale_factor = np.sqrt(contour_area / initial_ellipse_area)
-    
+
     # 6. Apply the constraint to the axes
     w_constrained = w_init * scale_factor
     h_constrained = h_init * scale_factor
-    
+
     # Return the modified OpenCV-compliant RotatedRect tuple
     return ((cx, cy), (w_constrained, h_constrained), angle)
+
 
 def proc_cont_great_50(self):
     # Segment contours (pores from now on...) with an area greather than the area of a pore with a diameter of 50 micron
@@ -364,18 +366,16 @@ def proc_cont_great_50(self):
             m.sqrt(S**2 + C**2) / m.sqrt(2),  # Pore elongation
             m.atan(S / C) * 180 / m.pi,  # Pore irragularity (deg)
             2 * m.sqrt(cont[4] / m.pi),  # Equivalent diameter (μm)
-            fit_constrained_area_Ellipse(cont[2])[1][0] / self.calibration,  # Ellipse minor diameter (μm)
-            fit_constrained_area_Ellipse(cont[2])[1][1] / self.calibration,  # Ellipse major diameter (μm)
+            fit_constrained_area_Ellipse(cont[2])[1][0]
+            / self.calibration,  # Ellipse minor diameter (μm)
+            fit_constrained_area_Ellipse(cont[2])[1][1]
+            / self.calibration,  # Ellipse major diameter (μm)
             fit_constrained_area_Ellipse(cont[2])[2],  # Ellipse angle
             (
-                (cont[5] - m.sqrt(cont[5] ** 2 - 16 * cont[4])) / 4
-                if S < m.pi / 4
-                else None
+                (cont[5] - m.sqrt(cont[5] ** 2 - 16 * cont[4])) / 4 if S < m.pi / 4 else None
             ),  # Rectangle minor side (μm)
             (
-                (cont[5] + m.sqrt(cont[5] ** 2 - 16 * cont[4])) / 4
-                if S < m.pi / 4
-                else None
+                (cont[5] + m.sqrt(cont[5] ** 2 - 16 * cont[4])) / 4 if S < m.pi / 4 else None
             ),  # Rectangle major side (μm)
         ]
         for cont in self.processed_contours
@@ -456,8 +456,9 @@ def proc_cont_great_50(self):
             # Skip invalid shape-size combinations
             if (
                 (shape["name"] != "elongated" and size["name"] in ["edS", "edM", "edL", "edXL"])
-                or (#shape["name"] != "circ" and 
-                    size["name"] in ["emdS", "emdM", "emdL", "emdXL"])
+                or (  # shape["name"] != "circ" and
+                    size["name"] in ["emdS", "emdM", "emdL", "emdXL"]
+                )
                 or (
                     (shape["name"] not in ["circ", "MLcirc"])
                     and size["name"] in ["rmsS", "rmsM", "rmsL", "rmsXL"]

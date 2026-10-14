@@ -60,9 +60,9 @@ def spectrum_tab(self):
     ttk.Button(
         aspect_frame, text="-", width=2, command=lambda: _spectrum_adjust_aspect(self, 1 / 1.25)
     ).pack(side=tk.LEFT)
-    ttk.Label(
-        aspect_frame, textvariable=self.spectrum_aspect_var, anchor="center", width=10
-    ).pack(side=tk.LEFT, expand=True, fill=tk.X)
+    ttk.Label(aspect_frame, textvariable=self.spectrum_aspect_var, anchor="center", width=10).pack(
+        side=tk.LEFT, expand=True, fill=tk.X
+    )
     ttk.Button(
         aspect_frame, text="+", width=2, command=lambda: _spectrum_adjust_aspect(self, 1.25)
     ).pack(side=tk.LEFT)
@@ -221,13 +221,12 @@ def _spectrum_load_failed(self, message):
 
 def _spectrum_load_done(self, path, entries):
     self.spectrum_stats_path = path
-    self.spectrum_mosaics = [
-        {**entry, "enabled": tk.BooleanVar(value=True)} for entry in entries
-    ]
+    self.spectrum_mosaics = [{**entry, "enabled": tk.BooleanVar(value=True)} for entry in entries]
     self.spectrum_load_btn.config(state=tk.NORMAL)
     self.spectrum_loading_var.set(f"Loaded {len(self.spectrum_mosaics)} mosaic(s).")
     _spectrum_rebuild_list_ui(self)
     _spectrum_redraw(self)
+
 
 def clean_float(value, *, field="value"):
     """Convert a value to float or raise an error identifying missing/invalid data."""
@@ -264,9 +263,9 @@ def _spectrum_read_global_stats(path):
 
     idx_name = find_col(["mosaic"]) or find_col(["name"])
     idx_porosity = find_col(["porosity"])
-    idx_pct_gt50 = find_col([">", "50"], avoid=["number", "num", "count", "parent", "child"]) or find_col(
-        ["percentage", "50"], avoid=["<"]
-    )
+    idx_pct_gt50 = find_col(
+        [">", "50"], avoid=["number", "num", "count", "parent", "child"]
+    ) or find_col(["percentage", "50"], avoid=["<"])
 
     # Búsqueda específica para "Number of parent contours > 50μm"
     idx_parents_gt50 = (
@@ -281,7 +280,9 @@ def _spectrum_read_global_stats(path):
     }
     missing_columns = [name for name, index in required_columns.items() if index is None]
     if missing_columns:
-        raise ValueError(f"Global pore stats is missing required column(s): {', '.join(missing_columns)}")
+        raise ValueError(
+            f"Global pore stats is missing required column(s): {', '.join(missing_columns)}"
+        )
 
     entries = []
     for row_number, row in enumerate(rows[1:], start=2):
@@ -361,7 +362,9 @@ def _spectrum_compute_mosaic_metrics(base_dir, name):
                 ws = wb[sheet_name]
                 total_area = 0.0
                 non_edge_areas = []
-                for row_number, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                for row_number, row in enumerate(
+                    ws.iter_rows(min_row=2, values_only=True), start=2
+                ):
                     if not row or row[0] is None:
                         continue
 
@@ -369,8 +372,15 @@ def _spectrum_compute_mosaic_metrics(base_dir, name):
                         row[2], field=f"Area in {shape_path}, sheet {sheet_name}, row {row_number}"
                     )
                     total_area += area
-                    
-                    is_edge = str(row[1]).strip().lower() in ("true", "1", "1.0", "yes", "si", "verdadero")
+
+                    is_edge = str(row[1]).strip().lower() in (
+                        "true",
+                        "1",
+                        "1.0",
+                        "yes",
+                        "si",
+                        "verdadero",
+                    )
                     if not is_edge:
                         non_edge_areas.append(area)
 
@@ -428,6 +438,7 @@ def _spectrum_read_angle_histogram(h5_path):
 
     total = sum(counts)
     return [count * 100.0 / total for count in counts] if total else counts
+
 
 # --------------------------------------------------------------------------------------
 # Re-orderable / checkable mosaic list
@@ -669,12 +680,12 @@ def _spectrum_redraw(self):
             ax.tick_params(axis="x", labelbottom=False)
 
     self.spectrum_figure.subplots_adjust(
-    left=0.05,    # Margen izquierdo (para valores del eje Y)
-    right=0.98,   # Margen derecho
-    top=0.97,     # Margen superior
-    bottom=0.18,  # Margen inferior (espacio para las 50 etiquetas rotadas a 90°)
-    hspace=0.15   # Separación vertical entre subplots (valores menores = más juntos)
-)
+        left=0.05,  # Margen izquierdo (para valores del eje Y)
+        right=0.98,  # Margen derecho
+        top=0.97,  # Margen superior
+        bottom=0.18,  # Margen inferior (espacio para las 50 etiquetas rotadas a 90°)
+        hspace=0.15,  # Separación vertical entre subplots (valores menores = más juntos)
+    )
 
     _spectrum_apply_figure_size(self, n_mosaics)
     self.spectrum_canvas_agg.draw()

@@ -1,5 +1,5 @@
-import os
 import math as m
+import os
 import tkinter as tk
 import tkinter.filedialog as fd
 import tkinter.messagebox as messagebox
@@ -507,8 +507,9 @@ def save_segmented_pore_data(self, file_path, mosaic_name):
                 # Skip invalid shape-size combinations
                 if (
                     (shape["name"] != "elongated" and size["name"] in ["edS", "edM", "edL", "edXL"])
-                    or (#shape["name"] != "circ" and 
-                        size["name"] in ["emdS", "emdM", "emdL", "emdXL"])
+                    or (  # shape["name"] != "circ" and
+                        size["name"] in ["emdS", "emdM", "emdL", "emdXL"]
+                    )
                     or (
                         (shape["name"] not in ["circ", "MLcirc"])
                         and size["name"] in ["rmsS", "rmsM", "rmsL", "rmsXL"]

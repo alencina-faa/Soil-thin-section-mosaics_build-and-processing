@@ -14,6 +14,7 @@ Desktop toolkit for building, processing, and exploring soil thin section mosaic
 - Processes pores by size classes using contour analysis.
 - Exports images, HDF5 contour data, and spreadsheet summaries.
 - Visualizes selected pore contours and per-pore statistics.
+- Compares pore metrics across multiple mosaics.
 
 ## Installation
 
@@ -89,6 +90,18 @@ Screenshot:
 
 ![Visualize tab](screenshots/imagen3.png)
 
+### Spectrum Tab
+
+Purpose:
+
+- Load `Global_Pore_Stats.xlsx` and compare pore metrics across multiple mosaics.
+- Review general statistics, normalized area fractions, pore counts, average pore areas by size, and elongated-pore angle distributions.
+- Enable, disable, and reorder mosaics, and adjust the chart aspect ratio.
+
+Screenshot:
+
+![Spectrum tab](screenshots/imagen4.png)
+
 ### Acquire Tab (TBD)
 
 Planned:
@@ -121,6 +134,7 @@ Planned:
 - src/stsm/display.py: canvas rendering helpers
 - src/stsm/layer_controls.py: layer visibility and ordering
 - src/stsm/roi.py: ROI selection and handoff to processing
+- src/stsm/spectrum_tab.py: spectrum tab UI and controls
 
 ## Suggested Next Improvements
 
