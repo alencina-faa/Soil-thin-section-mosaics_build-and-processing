@@ -7,10 +7,9 @@ import tkinter.messagebox as messagebox
 from tkinter import ttk
 
 import h5py
+import matplotlib
 import openpyxl as opxl
 from PIL import Image
-
-import matplotlib
 
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # noqa: E402
@@ -22,6 +21,8 @@ SHAPES = ["circ", "MLcirc", "shpless", "elongated"]
 SIZES = ["S", "M", "L", "XL"]
 SIZE_SHEET_PREFIX = "emd"
 ROW_HEIGHT = 28
+ANGLE_BIN_EDGES = (0, 18, 36, 54, 72, 90)
+ANGLE_BIN_LABELS = [f"{start}-{end}°" for start, end in zip(ANGLE_BIN_EDGES, ANGLE_BIN_EDGES[1:])]
 
 # Normalization constants for average pore area by size (Point 5)
 NORM_AREA = {
@@ -78,8 +79,9 @@ def spectrum_tab(self):
     legend_items = [
         ("General Stats", "#1f77b4"),
         ("Area Fraction (Σ=100%)", "#2ca02c"),
-        ("Avg Area (norm. size)", "#ff7f0e"),
         ("Pore Count (/parents >50μm)", "#9467bd"),
+        ("Avg Area (norm. size)", "#ff7f0e"),
+        ("Elongated Angle Histogram (%)", "#17becf"),
     ]
 
     for label_text, color_hex in legend_items:
@@ -202,8 +204,9 @@ def _spectrum_load_stats(self):
             base_dir = os.path.dirname(path)
             for entry in entries:
                 entry.update(_spectrum_compute_mosaic_metrics(base_dir, entry["name"]))
-        except Exception as e:
-            self.root.after(0, lambda: _spectrum_load_failed(self, str(e)))
+        except Exception as error:
+            message = str(error)
+            self.root.after(0, lambda message=message: _spectrum_load_failed(self, message))
             return
         self.root.after(0, lambda: _spectrum_load_done(self, path, entries))
 
@@ -226,17 +229,15 @@ def _spectrum_load_done(self, path, entries):
     _spectrum_rebuild_list_ui(self)
     _spectrum_redraw(self)
 
-def clean_float(value, default=0.0):
-    """Convierte de forma segura textos con comas o puntos a float."""
+def clean_float(value, *, field="value"):
+    """Convert a value to float or raise an error identifying missing/invalid data."""
     if value is None:
-        return default
-    if isinstance(value, (int, float)):
-        return float(value)
+        raise ValueError(f"{field} is missing; expected a numeric value.")
     try:
         val_str = str(value).strip().replace(",", ".")
         return float(val_str)
-    except (ValueError, TypeError):
-        return default
+    except (ValueError, TypeError) as error:
+        raise ValueError(f"{field} must be numeric; got {value!r}.") from error
 
 
 def _spectrum_read_global_stats(path):
@@ -273,21 +274,31 @@ def _spectrum_read_global_stats(path):
         or find_col(["parent", "50"], avoid=["<", "percentage", "%", "child"])
         or find_col(["parent"], avoid=["%", "<", "child"])
     )
+    required_columns = {
+        "Porosity": idx_porosity,
+        "Percentage of pores > 50μm": idx_pct_gt50,
+        "Number of parent contours > 50μm": idx_parents_gt50,
+    }
+    missing_columns = [name for name, index in required_columns.items() if index is None]
+    if missing_columns:
+        raise ValueError(f"Global pore stats is missing required column(s): {', '.join(missing_columns)}")
 
     entries = []
-    for row in rows[1:]:
+    for row_number, row in enumerate(rows[1:], start=2):
         if not row or idx_name is None or idx_name >= len(row) or row[idx_name] is None:
             continue
         m_name = str(row[idx_name]).strip()
         if not m_name:
             continue
 
-        porosity = clean_float(row[idx_porosity]) if (idx_porosity is not None and idx_porosity < len(row)) else 0.0
-        pct_gt50 = clean_float(row[idx_pct_gt50]) if (idx_pct_gt50 is not None and idx_pct_gt50 < len(row)) else 0.0
-
-        parents_val = 1.0
-        if idx_parents_gt50 is not None and idx_parents_gt50 < len(row):
-            parents_val = clean_float(row[idx_parents_gt50], default=1.0)
+        porosity = clean_float(row[idx_porosity], field=f"Porosity in row {row_number}")
+        pct_gt50 = clean_float(
+            row[idx_pct_gt50], field=f"Percentage of pores > 50μm in row {row_number}"
+        )
+        parents_val = clean_float(
+            row[idx_parents_gt50],
+            field=f"Number of parent contours > 50μm in row {row_number}",
+        )
 
         entries.append(
             {
@@ -315,11 +326,12 @@ def _spectrum_compute_mosaic_metrics(base_dir, name):
             if os.path.exists(h5_path):
                 with h5py.File(h5_path, "r") as f:
                     calibration = f.attrs.get("pixel_calibration_px_per_um")
-            if calibration:
-                cal_val = clean_float(calibration, default=0.0)
-                if cal_val > 0:
-                    image_area_um2 = (width_px * height_px) / (cal_val**2)
-        except Exception:
+            if calibration is not None:
+                cal_val = clean_float(calibration, field=f"Pixel calibration in {h5_path}")
+                if cal_val <= 0:
+                    raise ValueError(f"Pixel calibration in {h5_path} must be greater than zero.")
+                image_area_um2 = (width_px * height_px) / (cal_val**2)
+        except OSError:
             image_area_um2 = None
 
     area_fraction_raw = {}
@@ -349,12 +361,13 @@ def _spectrum_compute_mosaic_metrics(base_dir, name):
                 ws = wb[sheet_name]
                 total_area = 0.0
                 non_edge_areas = []
-                for row in ws.iter_rows(min_row=2, values_only=True):
+                for row_number, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
                     if not row or row[0] is None:
                         continue
-                    
-                    # Uso de clean_float para manejar comas decimales
-                    area = clean_float(row[2])
+
+                    area = clean_float(
+                        row[2], field=f"Area in {shape_path}, sheet {sheet_name}, row {row_number}"
+                    )
                     total_area += area
                     
                     is_edge = str(row[1]).strip().lower() in ("true", "1", "1.0", "yes", "si", "verdadero")
@@ -369,11 +382,52 @@ def _spectrum_compute_mosaic_metrics(base_dir, name):
         finally:
             wb.close()
 
+    angle_histogram = _spectrum_read_angle_histogram(h5_path)
+
     return {
         "area_fraction_raw": area_fraction_raw,
         "avg_area_raw": avg_area_raw,
         "count_raw": count_raw,
+        "angle_histogram": angle_histogram,
     }
+
+
+def _spectrum_read_angle_histogram(h5_path):
+    """Return five percentages for eligible elongated pores, folded to 0-90 degrees."""
+    counts = [0] * (len(ANGLE_BIN_EDGES) - 1)
+    if not os.path.exists(h5_path):
+        return counts
+
+    with h5py.File(h5_path, "r") as h5_file:
+        for contour in h5_file.get("contours", {}).values():
+            attrs = contour.attrs
+            shape = attrs.get("shape_name", "")
+            if isinstance(shape, bytes):
+                shape = shape.decode("utf-8", errors="replace")
+            if str(shape) != "elongated":
+                continue
+
+            size_name = attrs.get("size_name", "")
+            if isinstance(size_name, bytes):
+                size_name = size_name.decode("utf-8", errors="replace")
+            if not str(size_name).endswith(tuple(SIZES)):
+                continue
+            if bool(attrs.get("is_edge", True)) or not bool(attrs.get("is_over_50um", False)):
+                continue
+
+            angle = attrs.get("ellipse_angle_deg")
+            if angle is None:
+                continue
+            angle = clean_float(angle, field=f"Ellipse angle for contour {contour.name}")
+            angle = 180 - angle if angle > 90 else angle
+            if not 0 <= angle <= 90:
+                continue
+
+            bin_index = min(int(angle // 18), len(counts) - 1)
+            counts[bin_index] += 1
+
+    total = sum(counts)
+    return [count * 100.0 / total for count in counts] if total else counts
 
 # --------------------------------------------------------------------------------------
 # Re-orderable / checkable mosaic list
@@ -431,12 +485,13 @@ def _spectrum_end_drag(self, event):
 # --------------------------------------------------------------------------------------
 def _spectrum_prepare_data(mosaics):
     """
-    Builds the array of 50 column labels and calculated values rescaled to [0, 100].
+        Builds the array of 55 column labels and calculated values rescaled to [0, 100].
     Categories:
       1. General stats (2 values: Porosity, % > 50μm)
       2. Area fraction (16 values: sum normalized to 1, then x100 -> sum=100%)
-      3. Average pore area (16 values: normalized by size area, then x100)
-      4. Pore count (16 values: divided by parents > 50μm, then x100)
+            3. Pore count (16 values: divided by parents > 50μm, then x100)
+            4. Average pore area (16 values: normalized by size area, then x100)
+            5. Elongated-pore angle histogram (5 bins normalized to sum to 100%)
     """
     combos = [(shape, size) for shape in SHAPES for size in SIZES]
 
@@ -448,13 +503,16 @@ def _spectrum_prepare_data(mosaics):
     for shape, size in combos:
         labels.append(f"AF {shape}-{size}")
 
-    # 3. Avg area (16)
+    # 3. Count (16)
+    for shape, size in combos:
+        labels.append(f"Cnt {shape}-{size}")
+
+    # 4. Average area (16)
     for shape, size in combos:
         labels.append(f"AvgA {shape}-{size}")
 
-    # 4. Count (16)
-    for shape, size in combos:
-        labels.append(f"Cnt {shape}-{size}")
+    # 5. Elongated-pore angle histogram (5 bins)
+    labels.extend(f"Angle {label}" for label in ANGLE_BIN_LABELS)
 
     data_by_mosaic = {}
     for m in mosaics:
@@ -473,20 +531,23 @@ def _spectrum_prepare_data(mosaics):
             af_norm = (m["area_fraction_raw"].get(c, 0.0) / sum_af) if sum_af > 0 else 0.0
             vals.append(af_norm * 100.0)
 
-        # 3. Avg area (Point 5 : normalized by size formula, rescaled to 100%)
-        for shape, size in combos:
-            avg_a = m["avg_area_raw"].get((shape, size), 0.0)
-            norm_factor = NORM_AREA[size]
-            a_norm = avg_a / norm_factor
-            vals.append(a_norm * 100.0) 
-
-        # 4. Pore count (Point 6 & 7: divided by parents > 50μm, rescaled to 100%)
+        # 3. Pore count (Point 6 & 7: divided by parents > 50μm, rescaled to 100%)
         parents = m.get("parents_gt50", 1.0)
         parents = parents if parents > 0 else 1.0
         for c in combos:
             cnt = m["count_raw"].get(c, 0.0)
             cnt_norm = cnt / parents
             vals.append(cnt_norm * 100.0)
+
+        # 4. Average area (Point 5: normalized by size formula, rescaled to 100%)
+        for shape, size in combos:
+            avg_a = m["avg_area_raw"].get((shape, size), 0.0)
+            norm_factor = NORM_AREA[size]
+            a_norm = avg_a / norm_factor
+            vals.append(a_norm * 100.0)
+
+        # 5. Histogram percentages already sum to 100 for mosaics with eligible pores.
+        vals.extend(m.get("angle_histogram", [0.0] * len(ANGLE_BIN_LABELS)))
 
         data_by_mosaic[m["name"]] = vals
 
@@ -558,8 +619,14 @@ def _spectrum_redraw(self):
     if n_mosaics == 1:
         axes = [axes]
 
-    # Category bar colors: Blue (General), Green (Area Fraction), Orange (Avg Area), Purple (Count)
-    bar_colors = ["#1f77b4"] * 2 + ["#2ca02c"] * 16 + ["#ff7f0e"] * 16 + ["#9467bd"] * 16
+    # Category colors: General, area fraction, count, average area, angle histogram.
+    bar_colors = (
+        ["#1f77b4"] * 2
+        + ["#2ca02c"] * 16
+        + ["#9467bd"] * 16
+        + ["#ff7f0e"] * 16
+        + ["#17becf"] * len(ANGLE_BIN_LABELS)
+    )
     x = list(range(len(labels)))
 
     for idx, m in enumerate(visible_mosaics):
@@ -585,6 +652,7 @@ def _spectrum_redraw(self):
         ax.axvline(1.5, color="black", linestyle="--", linewidth=1.0, alpha=0.7)
         ax.axvline(17.5, color="black", linestyle="--", linewidth=1.0, alpha=0.7)
         ax.axvline(33.5, color="black", linestyle="--", linewidth=1.0, alpha=0.7)
+        ax.axvline(49.5, color="black", linestyle="--", linewidth=1.0, alpha=0.7)
 
         # Subgroup separators between XL and S of next shape (dotted)
         sub_lines = [5.5, 9.5, 13.5, 21.5, 25.5, 29.5, 37.5, 41.5, 45.5]
